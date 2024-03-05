@@ -3,6 +3,8 @@ package jcmint;
 public class Consts {
     public static final byte CLA_JCMINT = (byte) 0x00;
 
+    public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
+
     public final static short SW_Exception = (short) 0xff01;
     public final static short SW_ArrayIndexOutOfBoundsException = (short) 0xff02;
     public final static short SW_ArithmeticException = (short) 0xff03;

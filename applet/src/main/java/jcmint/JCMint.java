@@ -2,13 +2,21 @@ package jcmint;
 
 import javacard.framework.*;
 import javacard.security.*;
+import jcmint.jcmathlib.*;
 
 public class JCMint extends Applet {
+    public final static short CARD_TYPE = OperationSupport.SIMULATOR;
+
+    public static ResourceManager rm;
+    public static ECCurve curve;
+
+    private boolean initialized = false;
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         new JCMint(bArray, bOffset, bLength);
     }
 
     public JCMint(byte[] buffer, short offset, byte length) {
+        OperationSupport.getInstance().setCard(CARD_TYPE);
         register();
     }
 
@@ -18,6 +26,9 @@ public class JCMint extends Applet {
 
         if (apdu.getBuffer()[ISO7816.OFFSET_CLA] != Consts.CLA_JCMINT)
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+
+        if (!initialized)
+            initialize();
 
         try {
             switch (apdu.getBuffer()[ISO7816.OFFSET_INS]) {
@@ -52,8 +63,20 @@ public class JCMint extends Applet {
     }
 
     public boolean select() {
+        if (initialized)
+            curve.updateAfterReset();
         return true;
     }
 
     public void deselect() {}
+
+    private void initialize() {
+        if (initialized)
+            ISOException.throwIt(Consts.E_ALREADY_INITIALIZED);
+
+        rm = new ResourceManager((short) 256);
+        curve = new ECCurve(SecP256k1.p, SecP256k1.a, SecP256k1.b, SecP256k1.G, SecP256k1.r, rm);
+
+        initialized = true;
+    }
 }
