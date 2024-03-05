@@ -1,9 +1,14 @@
 package jcmint;
 
 public class Consts {
+    public final static byte MAX_PARTIES = 3;
+
     public static final byte CLA_JCMINT = (byte) 0x00;
 
+    public static final byte INS_SETUP = (byte) 0x00;
+
     public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
+    public final static short E_INVALID_PARTY_COUNT = (short) 0xee01;
 
     public final static short SW_Exception = (short) 0xff01;
     public final static short SW_ArrayIndexOutOfBoundsException = (short) 0xff02;

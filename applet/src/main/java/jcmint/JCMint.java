@@ -10,6 +10,12 @@ public class JCMint extends Applet {
     public static ResourceManager rm;
     public static ECCurve curve;
 
+    public byte index;
+    public byte parties;
+    public static BigNat secret;
+    public static ECPoint mintKey;
+    public static ECPoint[] partialKeys;
+
     private boolean initialized = false;
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         new JCMint(bArray, bOffset, bLength);
@@ -32,6 +38,9 @@ public class JCMint extends Applet {
 
         try {
             switch (apdu.getBuffer()[ISO7816.OFFSET_INS]) {
+                case Consts.INS_SETUP:
+                    setup(apdu);
+                    break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
             }
@@ -76,7 +85,32 @@ public class JCMint extends Applet {
 
         rm = new ResourceManager((short) 256);
         curve = new ECCurve(SecP256k1.p, SecP256k1.a, SecP256k1.b, SecP256k1.G, SecP256k1.r, rm);
+        secret = new BigNat((short) 32, JCSystem.MEMORY_TYPE_PERSISTENT, rm);
+        mintKey = new ECPoint(curve);
+        partialKeys = new ECPoint[Consts.MAX_PARTIES];
+        for (short i = 0; i < Consts.MAX_PARTIES; ++i) {
+            partialKeys[i] = new ECPoint(curve);
+        }
 
         initialized = true;
+    }
+
+    private void setup(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+        index = apduBuffer[ISO7816.OFFSET_P1];
+        parties = apduBuffer[ISO7816.OFFSET_P2];
+        if (parties < 1 || parties > Consts.MAX_PARTIES) {
+            ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
+        }
+        secret.fromByteArray(apduBuffer, ISO7816.OFFSET_CDATA, (short) 32);
+        for (short i = 0; i < parties; ++i) {
+            partialKeys[i].decode(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 * i), (short) 65);
+        }
+        mintKey.copy(partialKeys[0]);
+        for (short i = 1; i < parties; ++i) {
+            mintKey.add(partialKeys[i]);
+        }
+
+        apdu.setOutgoingAndSend((short) 0, mintKey.getW(apduBuffer, (short) 0));
     }
 }
