@@ -15,6 +15,11 @@ public class JCMint extends Applet {
     public static BigNat secret;
     public static ECPoint mintKey, challenge;
     public static ECPoint[] partialKeys;
+    public static MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
+    public static byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
+    public static byte[] hashBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
+    public static byte[] counterBuffer = JCSystem.makeTransientByteArray((short) 4, JCSystem.CLEAR_ON_RESET);
+    public static ECPoint hashOutput;
 
     private boolean initialized = false;
     public static void install(byte[] bArray, short bOffset, byte bLength) {
@@ -43,6 +48,9 @@ public class JCMint extends Applet {
                     break;
                 case Consts.INS_ISSUE:
                     issue(apdu);
+                    break;
+                case Consts.INS_HASH_TO_CURVE:
+                    hashToCurve(apdu);
                     break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -95,6 +103,7 @@ public class JCMint extends Applet {
             partialKeys[i] = new ECPoint(curve);
         }
         challenge = new ECPoint(curve);
+        hashOutput = new ECPoint(curve);
 
         initialized = true;
     }
@@ -125,5 +134,30 @@ public class JCMint extends Applet {
         challenge.multiplication(secret);
 
         apdu.setOutgoingAndSend((short) 0, challenge.getW(apduBuffer, (short) 0));
+    }
+
+    private void hashToCurve(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+
+        h2c(apduBuffer, ISO7816.OFFSET_CDATA, (short) 32);
+        apdu.setOutgoingAndSend((short) 0, hashOutput.getW(apduBuffer, (short) 0));
+    }
+
+    private void h2c(byte[] data, short offset, short length) {
+        Util.arrayFillNonAtomic(counterBuffer, (short) 0, (short) counterBuffer.length, (byte) 0);
+        md.reset();
+        md.update(Consts.H2C_DOMAIN_SEPARATOR, (short) 0, (short) Consts.H2C_DOMAIN_SEPARATOR.length);
+        md.doFinal(data, offset, length, prefixBuffer, (short) 0);
+
+        for (short counter = 0; counter < (short) 256; ++counter) { // TODO consider increasing max number of iters
+            md.reset();
+            md.update(prefixBuffer, (short) 0, (short) 32);
+            counterBuffer[0] = (byte) (counter & 0xff);
+            md.doFinal(counterBuffer, (short) 0, (short) 4, hashBuffer, (short) 0);
+            if (hashOutput.fromX(hashBuffer, (short) 0, (short) 32))
+                break;
+        }
+        if (!hashOutput.isYEven())
+            hashOutput.negate();
     }
 }
