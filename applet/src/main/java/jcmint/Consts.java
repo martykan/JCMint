@@ -6,6 +6,7 @@ public class Consts {
     public static final byte CLA_JCMINT = (byte) 0x00;
 
     public static final byte INS_SETUP = (byte) 0x00;
+    public static final byte INS_ISSUE = (byte) 0x01;
 
     public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
     public final static short E_INVALID_PARTY_COUNT = (short) 0xee01;

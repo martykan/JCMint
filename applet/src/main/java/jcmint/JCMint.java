@@ -13,7 +13,7 @@ public class JCMint extends Applet {
     public byte index;
     public byte parties;
     public static BigNat secret;
-    public static ECPoint mintKey;
+    public static ECPoint mintKey, challenge;
     public static ECPoint[] partialKeys;
 
     private boolean initialized = false;
@@ -40,6 +40,9 @@ public class JCMint extends Applet {
             switch (apdu.getBuffer()[ISO7816.OFFSET_INS]) {
                 case Consts.INS_SETUP:
                     setup(apdu);
+                    break;
+                case Consts.INS_ISSUE:
+                    issue(apdu);
                     break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -91,6 +94,7 @@ public class JCMint extends Applet {
         for (short i = 0; i < Consts.MAX_PARTIES; ++i) {
             partialKeys[i] = new ECPoint(curve);
         }
+        challenge = new ECPoint(curve);
 
         initialized = true;
     }
@@ -112,5 +116,14 @@ public class JCMint extends Applet {
         }
 
         apdu.setOutgoingAndSend((short) 0, mintKey.getW(apduBuffer, (short) 0));
+    }
+
+    private void issue(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+
+        challenge.decode(apduBuffer, ISO7816.OFFSET_CDATA, (short) 65);
+        challenge.multiplication(secret);
+
+        apdu.setOutgoingAndSend((short) 0, challenge.getW(apduBuffer, (short) 0));
     }
 }
