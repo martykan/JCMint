@@ -9,25 +9,25 @@ import jcmint.jcmathlib.*;
 public class JCMint extends Applet implements ExtendedLength {
     public final static short CARD_TYPE = OperationSupport.SIMULATOR;
 
-    public static ResourceManager rm;
-    public static ECCurve curve;
+    public ResourceManager rm;
+    public ECCurve curve;
 
     public byte index;
     public byte parties;
-    public static BigNat secret;
-    public static ECPoint mintKey, tmpPoint, tmpPoint2;
-    public static ECPoint[] partialKeys;
-    public static MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-    public static byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
-    public static byte[] hashBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
-    public static byte[] counterBuffer = JCSystem.makeTransientByteArray((short) 4, JCSystem.CLEAR_ON_RESET);
-    public static byte[] rngBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
-    public static byte[] pointBuffer = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
-    public static ECPoint hashOutput;
-    public static Ledger ledger = new Ledger();
-    public static byte[] verifying = new byte[(short) (32 + 65)];
+    public BigNat secret;
+    public ECPoint mintKey, tmpPoint, tmpPoint2;
+    public ECPoint[] partialKeys;
+    public MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
+    public byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
+    public byte[] hashBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
+    public byte[] counterBuffer = JCSystem.makeTransientByteArray((short) 4, JCSystem.CLEAR_ON_RESET);
+    public byte[] rngBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
+    public byte[] pointBuffer = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
+    public ECPoint hashOutput;
+    public Ledger ledger = new Ledger();
+    public byte[] verifying = new byte[(short) (32 + 65)];
     RandomData randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-    public static BigNat nonce, tmpNat;
+    public BigNat nonce, tmpNat;
 
     private boolean initialized = false;
     public static void install(byte[] bArray, short bOffset, byte bLength) {
