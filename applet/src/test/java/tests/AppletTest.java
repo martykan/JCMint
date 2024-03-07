@@ -3,16 +3,19 @@ package tests;
 import cz.muni.fi.crocs.rcard.client.CardManager;
 import cz.muni.fi.crocs.rcard.client.Util;
 import javacard.framework.ISO7816;
+import java.security.MessageDigest;
 import jcmint.Consts;
 import cz.muni.fi.crocs.rcard.client.CardType;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
 import org.junit.jupiter.api.*;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.Random;
 
 public class AppletTest extends BaseTest {
@@ -20,7 +23,7 @@ public class AppletTest extends BaseTest {
     private final ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
     public AppletTest() {
         setCardType(CardType.JCARDSIMLOCAL);
-        setSimulateStateful(true);
+        setSimulateStateful(false);
     }
 
     public ECPoint setup(CardManager cm, int parties) throws Exception {
@@ -136,6 +139,45 @@ public class AppletTest extends BaseTest {
         ResponseAPDU responseAPDU = cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(responseAPDU.getSW(), ISO7816.SW_INS_NOT_SUPPORTED);
+    }
+
+    @Test
+    public void testVerifyProof() throws Exception {
+        CardManager cm = connect();
+        ECPoint mintKey = setup(cm, 1);
+
+        CommandAPDU cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_VERIFY,
+                (byte) 0,
+                (byte) 0,
+                Util.concat(new byte[32], ecSpec.getG().getEncoded(false))
+        );
+        ResponseAPDU responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+
+        byte[] encodedVerifyingPoint = Arrays.copyOfRange(responseAPDU.getData(), 0, 65);
+        BigInteger e = new BigInteger(1, Arrays.copyOfRange(responseAPDU.getData(), 65, 65 + 32));
+        BigInteger s = new BigInteger(1, Arrays.copyOfRange(responseAPDU.getData(), 65 + 32, 65 + 32 + 32));
+
+        ECPoint X = ecSpec.getCurve().decodePoint(Hex.decode("044cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a72532e97a708760bfdc863bc2731ce604c7b7cb9df2a55410f18ce031fc1dcfb18e"));
+        ECPoint Y = ecSpec.getCurve().decodePoint(encodedVerifyingPoint);
+        ECPoint P = ecSpec.getG();
+        ECPoint Q = mintKey;
+
+        ECPoint A = X.multiply(s).subtract(Y.multiply(e));
+        ECPoint B = P.multiply(s).subtract(Q.multiply(e));
+
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        md.update(X.getEncoded(false));
+        md.update(Y.getEncoded(false));
+        md.update(P.getEncoded(false));
+        md.update(Q.getEncoded(false));
+        md.update(A.getEncoded(false));
+        md.update(B.getEncoded(false));
+        BigInteger result = new BigInteger(1, md.digest());
+        Assertions.assertEquals(e, result);
     }
 
     private BigInteger randomBigInt(int bytes) {
