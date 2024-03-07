@@ -142,6 +142,27 @@ public class AppletTest extends BaseTest {
     }
 
     @Test
+    public void testVerifyFail() throws Exception {
+        CardManager cm = connect();
+        ECPoint mintKey = setup(cm, 1);
+
+        CommandAPDU cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_VERIFY,
+                (byte) 0,
+                (byte) 0,
+                Util.concat(new byte[32], ecSpec.getG().getEncoded(false))
+        );
+        ResponseAPDU responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+
+        responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(Consts.E_ALREADY_SPENT & 0xffff, responseAPDU.getSW());
+    }
+
+    @Test
     public void testVerifyProof() throws Exception {
         CardManager cm = connect();
         ECPoint mintKey = setup(cm, 1);

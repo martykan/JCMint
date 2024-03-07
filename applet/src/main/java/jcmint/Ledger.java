@@ -17,4 +17,8 @@ public class Ledger {
         }
         return false;
     }
+
+    public void reset() {
+        last = 0;
+    }
 }

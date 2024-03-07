@@ -134,6 +134,7 @@ public class JCMint extends Applet {
         for (short i = 1; i < parties; ++i) {
             mintKey.add(partialKeys[i]);
         }
+        ledger.reset();
 
         apdu.setOutgoingAndSend((short) 0, mintKey.getW(apduBuffer, (short) 0));
     }
