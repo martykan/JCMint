@@ -2,9 +2,11 @@ package jcmint;
 
 import javacard.framework.*;
 import javacard.security.*;
+import javacardx.apdu.ExtendedLength;
 import jcmint.jcmathlib.*;
 
-public class JCMint extends Applet {
+
+public class JCMint extends Applet implements ExtendedLength {
     public final static short CARD_TYPE = OperationSupport.SIMULATOR;
 
     public static ResourceManager rm;
@@ -13,7 +15,7 @@ public class JCMint extends Applet {
     public byte index;
     public byte parties;
     public static BigNat secret;
-    public static ECPoint mintKey, tmpPoint;
+    public static ECPoint mintKey, tmpPoint, tmpPoint2;
     public static ECPoint[] partialKeys;
     public static MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
     public static byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 32, JCSystem.CLEAR_ON_RESET);
@@ -60,6 +62,9 @@ public class JCMint extends Applet {
                     break;
                 case Consts.INS_VERIFY:
                     verify(apdu);
+                    break;
+                case Consts.INS_SWAP:
+                    swap(apdu);
                     break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -112,6 +117,7 @@ public class JCMint extends Applet {
             partialKeys[i] = new ECPoint(curve);
         }
         tmpPoint = new ECPoint(curve);
+        tmpPoint2 = new ECPoint(curve);
         hashOutput = new ECPoint(curve);
         nonce = new BigNat((short) 32, JCSystem.MEMORY_TYPE_TRANSIENT_RESET, rm);
         tmpNat = new BigNat((short) 32, JCSystem.MEMORY_TYPE_TRANSIENT_RESET, rm);
@@ -184,6 +190,7 @@ public class JCMint extends Applet {
 
         md.reset();
 
+
         // DLEQ X
         h2c(apduBuffer, ISO7816.OFFSET_CDATA, (short) 32);
         hashOutput.getW(pointBuffer, (short) 0);
@@ -222,5 +229,69 @@ public class JCMint extends Applet {
         tmpNat.copyToByteArray(apduBuffer, (short) (65 + 32));
 
         apdu.setOutgoingAndSend((short) 0, (short) (65 + 32 + 32));
+    }
+
+    private void swap(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+
+        if (Util.arrayCompare(apduBuffer, ISO7816.OFFSET_EXT_CDATA, verifying, (short) 0, (short) 32) != 0) {
+            ISOException.throwIt(Consts.E_NOT_VERIFYING);
+        }
+
+        h2c(apduBuffer, ISO7816.OFFSET_EXT_CDATA, (short) 32);
+        md.reset();
+        for (short i = 0; i < parties; ++i) {
+            hashOutput.getW(pointBuffer, (short) 0);
+            md.update(pointBuffer, (short) 0, (short) 65); // X
+            md.update(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65); // Y
+            md.update(curve.G, (short) 0, (short) curve.G.length); // P
+            partialKeys[i].getW(pointBuffer, (short) 0);
+            md.update(pointBuffer, (short) 0, (short) 65); // Q
+
+            // compute A
+            tmpPoint2.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65);
+            tmpNat.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65), (short) 32); // e
+            tmpPoint2.multiplication(tmpNat);
+            tmpPoint2.negate();
+
+            tmpPoint.copy(hashOutput);
+            tmpNat.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65 + 32), (short) 32); // s
+            tmpPoint.multAndAdd(tmpNat, tmpPoint2);
+            tmpPoint.getW(pointBuffer, (short) 0);
+            md.update(pointBuffer, (short) 0, (short) 65); // A
+
+            // compute B
+            tmpPoint2.copy(partialKeys[i]);
+            tmpNat.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65), (short) 32); // e
+            tmpPoint2.multiplication(tmpNat);
+            tmpPoint2.negate();
+
+            tmpPoint.decode(curve.G, (short) 0, (short) curve.G.length);
+            tmpNat.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65 + 32), (short) 32); // s
+            tmpPoint.multAndAdd(tmpNat, tmpPoint2);
+            tmpPoint.getW(pointBuffer, (short) 0);
+            md.doFinal(pointBuffer, (short) 0, (short) 65, hashBuffer, (short) 0); // B
+
+            if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65), hashBuffer, (short) 0, (short) 32) != 0) {
+                ISOException.throwIt(Consts.E_VERIFICATION_FAILED_PROOF);
+            }
+        }
+
+        tmpPoint.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65), (short) 65);
+        for (short i = 1; i < parties; ++i) {
+            hashOutput.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65);
+            tmpPoint.add(hashOutput);
+        }
+
+        tmpPoint.getW(pointBuffer, (short) 0);
+        if (Util.arrayCompare(pointBuffer, (short) 0, verifying, (short) 32, (short) 65) != 0) {
+            ISOException.throwIt(Consts.E_VERIFICATION_FAILED_TOKEN);
+        }
+
+        Util.arrayFillNonAtomic(verifying, (short) 0, (short) verifying.length, (byte) 0);
+
+        tmpPoint.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65), (short) 65);
+        tmpPoint.multiplication(secret);
+        apdu.setOutgoingAndSend((short) 0, tmpPoint.getW(apduBuffer, (short) 0));
     }
 }

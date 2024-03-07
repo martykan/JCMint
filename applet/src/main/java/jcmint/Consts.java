@@ -10,10 +10,14 @@ public class Consts {
     public static final byte INS_ISSUE = (byte) 0x01;
     public static final byte INS_HASH_TO_CURVE = (byte) 0x02;
     public static final byte INS_VERIFY = (byte) 0x03;
+    public static final byte INS_SWAP = (byte) 0x04;
 
     public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
     public final static short E_INVALID_PARTY_COUNT = (short) 0xee01;
     public final static short E_ALREADY_SPENT = (short) 0xee02;
+    public final static short E_NOT_VERIFYING = (short) 0xee03;
+    public final static short E_VERIFICATION_FAILED_PROOF = (short) 0xee04;
+    public final static short E_VERIFICATION_FAILED_TOKEN = (short) 0xee05;
 
     public final static short SW_Exception = (short) 0xff01;
     public final static short SW_ArrayIndexOutOfBoundsException = (short) 0xff02;
