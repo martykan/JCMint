@@ -23,6 +23,7 @@ public class JCMint extends Applet implements ExtendedLength {
     private BigNat bn1, bn2;
     private final byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 36, JCSystem.CLEAR_ON_RESET);
     private final byte[] ramArray = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
+    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 512, JCSystem.CLEAR_ON_RESET);
 
     private final Ledger ledger = new Ledger();
     private final byte[] verifying = new byte[(short) (32 + 65)];
@@ -227,6 +228,15 @@ public class JCMint extends Applet implements ExtendedLength {
 
     private void swap(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
+        short recvLen = (short) (apdu.setIncomingAndReceive() + ISO7816.OFFSET_EXT_CDATA);
+        short written = 0;
+        while (recvLen > 0) {
+            Util.arrayCopyNonAtomic(apduBuffer, (short) 0, largeBuffer, written, recvLen);
+            written += recvLen;
+            recvLen = apdu.receiveBytes((short) 0);
+        }
+        apduBuffer = largeBuffer;
+
         BigNat e = bn1;
         BigNat s = bn2;
 
@@ -286,6 +296,6 @@ public class JCMint extends Applet implements ExtendedLength {
 
         point1.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65), (short) 65);
         point1.multiplication(secret);
-        apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
+        apdu.setOutgoingAndSend((short) 0, point1.getW(apdu.getBuffer(), (short) 0));
     }
 }
