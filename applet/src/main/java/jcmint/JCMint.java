@@ -64,6 +64,9 @@ public class JCMint extends Applet implements ExtendedLength {
                 case Consts.INS_SWAP:
                     swap(apdu);
                     break;
+                case Consts.INS_SWAP_SINGLE:
+                    swapSingle(apdu);
+                    break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
             }
@@ -294,5 +297,27 @@ public class JCMint extends Applet implements ExtendedLength {
         point1.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65), (short) 65);
         point1.multiplication(secret);
         apdu.setOutgoingAndSend((short) 0, point1.getW(apdu.getBuffer(), (short) 0));
+    }
+
+    private void swapSingle(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+
+        if (parties != 1)
+            ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
+
+        if (ledger.contains(apduBuffer, ISO7816.OFFSET_CDATA))
+            ISOException.throwIt(Consts.E_ALREADY_SPENT);
+
+        h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        point1.multiplication(secret);
+
+        point1.getW(ramArray, (short) 0);
+        if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32), ramArray, (short) 0, (short) 65) != 0)
+            ISOException.throwIt(Consts.E_VERIFICATION_FAILED_TOKEN);
+
+        ledger.append(apduBuffer, ISO7816.OFFSET_CDATA);
+        point1.decode(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65), (short) 65);
+        point1.multiplication(secret);
+        apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
     }
 }
