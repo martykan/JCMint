@@ -197,6 +197,7 @@ public class JCMint extends Applet implements ExtendedLength {
 
     private void verify(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
+        byte precomputed = apduBuffer[ISO7816.OFFSET_P1];
         BigNat nonce = bn1;
         BigNat tmp = bn2;
 
@@ -206,10 +207,13 @@ public class JCMint extends Applet implements ExtendedLength {
         ledger.append(apduBuffer, ISO7816.OFFSET_CDATA);
         Util.arrayCopyNonAtomic(apduBuffer, ISO7816.OFFSET_CDATA, verifying, (short) 0, (short) (32 + 65));
 
-        md.reset();
-
         // DLEQ X
-        h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        if (precomputed == (byte) 1) {
+            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65));
+        } else {
+            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        }
+        md.reset();
         point1.getW(verifying, (short) (32 + 65));
         md.update(verifying, (short) (32 + 65), (short) 65);
 

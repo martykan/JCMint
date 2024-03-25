@@ -203,6 +203,11 @@ public class AppletTest extends BaseTest {
 
     @Test
     public void testSwap() throws Exception {
+        swap(false);
+        swap(true);
+    }
+
+    public void swap(boolean precomputed) throws Exception {
         CardManager cm = connect();
         ECPoint mintKey = setup(cm, 1);
 
@@ -231,18 +236,23 @@ public class AppletTest extends BaseTest {
         Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
         ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
 
+        byte[] data = Util.concat(secret, token.getEncoded(false));
+        if (precomputed) {
+            data = Util.concat(data, hashedPoint.getEncoded(false));
+        }
+
         cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
                 Consts.INS_VERIFY,
+                (byte) (precomputed ? 1 : 0),
                 (byte) 0,
-                (byte) 0,
-                Util.concat(secret, token.getEncoded(false))
+                data
         );
         responseAPDU = cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
 
-        byte[] data = Util.concat(secret, token.getEncoded(false), ecSpec.getG().getEncoded(false));
+        data = Util.concat(secret, token.getEncoded(false), ecSpec.getG().getEncoded(false));
         data = Util.concat(data, responseAPDU.getData());
         cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
