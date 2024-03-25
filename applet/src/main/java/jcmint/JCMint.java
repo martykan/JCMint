@@ -70,6 +70,9 @@ public class JCMint extends Applet implements ExtendedLength {
                 case Consts.INS_REDEEM:
                     redeem(apdu);
                     break;
+                case Consts.INS_REDEEM_SINGLE:
+                    redeemSingle(apdu);
+                    break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
             }
@@ -353,6 +356,31 @@ public class JCMint extends Applet implements ExtendedLength {
 
         finishVerify(largeBuffer, apdu.getOffsetCdata(), largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65));
 
+        apdu.setOutgoing();
+    }
+
+    private void redeemSingle(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+        byte precomputed = apduBuffer[ISO7816.OFFSET_P1];
+
+        if (parties != 1)
+            ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
+
+        if (ledger.contains(apduBuffer, ISO7816.OFFSET_CDATA))
+            ISOException.throwIt(Consts.E_ALREADY_SPENT);
+
+        if (precomputed == (byte) 1) {
+            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65));
+        } else {
+            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        }
+        point1.multiplication(secret);
+
+        point1.getW(ramArray, (short) 0);
+        if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32), ramArray, (short) 0, (short) 65) != 0)
+            ISOException.throwIt(Consts.E_VERIFICATION_FAILED_TOKEN);
+
+        ledger.append(apduBuffer, ISO7816.OFFSET_CDATA);
         apdu.setOutgoing();
     }
 
