@@ -19,6 +19,7 @@ public class Consts {
     public final static short E_NOT_VERIFYING = (short) 0xee03;
     public final static short E_VERIFICATION_FAILED_PROOF = (short) 0xee04;
     public final static short E_VERIFICATION_FAILED_TOKEN = (short) 0xee05;
+    public final static short E_INVALID_PRECOMPUTE = (short) 0xee06;
 
     public final static short SW_Exception = (short) 0xff01;
     public final static short SW_ArrayIndexOutOfBoundsException = (short) 0xff02;

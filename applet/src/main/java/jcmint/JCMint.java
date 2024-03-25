@@ -176,6 +176,25 @@ public class JCMint extends Applet implements ExtendedLength {
             point1.negate();
     }
 
+    private void h2cPrecomputed(byte[] input, short inputOffset, byte[] result, short resultOffset) {
+        Util.arrayFillNonAtomic(prefixBuffer, (short) 32, (short) 4, (byte) 0);
+        md.reset();
+        md.update(Consts.H2C_DOMAIN_SEPARATOR, (short) 0, (short) Consts.H2C_DOMAIN_SEPARATOR.length);
+        md.doFinal(input, inputOffset, (short) 32, prefixBuffer, (short) 0);
+
+        md.reset();
+        md.doFinal(prefixBuffer, (short) 0, (short) prefixBuffer.length, ramArray, (short) 0);
+
+        if (Util.arrayCompare(ramArray, (short) 0, result, (short) (resultOffset + 1), (short) 32) != 0) {
+            ISOException.throwIt(Consts.E_INVALID_PRECOMPUTE);
+        }
+
+        point1.setW(result, resultOffset, (short) 65);
+
+        if (!point1.isYEven())
+            point1.negate();
+    }
+
     private void verify(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
         BigNat nonce = bn1;
@@ -301,6 +320,7 @@ public class JCMint extends Applet implements ExtendedLength {
 
     private void swapSingle(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
+        byte precomputed = apduBuffer[ISO7816.OFFSET_P1];
 
         if (parties != 1)
             ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
@@ -308,7 +328,11 @@ public class JCMint extends Applet implements ExtendedLength {
         if (ledger.contains(apduBuffer, ISO7816.OFFSET_CDATA))
             ISOException.throwIt(Consts.E_ALREADY_SPENT);
 
-        h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        if (precomputed == (byte) 1) {
+            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 + 65));
+        } else {
+            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        }
         point1.multiplication(secret);
 
         point1.getW(ramArray, (short) 0);
