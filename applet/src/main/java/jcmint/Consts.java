@@ -12,6 +12,7 @@ public class Consts {
     public static final byte INS_VERIFY = (byte) 0x03;
     public static final byte INS_SWAP = (byte) 0x04;
     public static final byte INS_SWAP_SINGLE = (byte) 0x05;
+    public static final byte INS_REDEEM = (byte) 0x06;
 
     public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
     public final static short E_INVALID_PARTY_COUNT = (short) 0xee01;

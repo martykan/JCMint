@@ -251,9 +251,10 @@ public class AppletTest extends BaseTest {
         responseAPDU = cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+        byte[] proofs = responseAPDU.getData();
 
         data = Util.concat(secret, token.getEncoded(false), ecSpec.getG().getEncoded(false));
-        data = Util.concat(data, responseAPDU.getData());
+        data = Util.concat(data, proofs);
         cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
                 Consts.INS_SWAP,
@@ -271,6 +272,72 @@ public class AppletTest extends BaseTest {
     public void testSwapSingle() throws Exception {
         swapSingle(false);
         swapSingle(true);
+    }
+
+    @Test
+    public void testRedeem() throws Exception {
+        redeem(false);
+        redeem(true);
+    }
+
+    public void redeem(boolean precomputed) throws Exception {
+        CardManager cm = connect();
+        ECPoint mintKey = setup(cm, 1);
+
+        byte[] secret = new byte[32];
+        CommandAPDU cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_HASH_TO_CURVE,
+                (byte) 0,
+                (byte) 0,
+                secret
+        );
+        ResponseAPDU responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+        ECPoint hashedPoint = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+
+        cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_ISSUE,
+                (byte) 0,
+                (byte) 0,
+                hashedPoint.getEncoded(false)
+        );
+        responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+        ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+
+        byte[] data = Util.concat(secret, token.getEncoded(false));
+        if (precomputed) {
+            data = Util.concat(data, hashedPoint.getEncoded(false));
+        }
+
+        cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_VERIFY,
+                (byte) (precomputed ? 1 : 0),
+                (byte) 0,
+                data
+        );
+        responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+        byte[] proofs = responseAPDU.getData();
+
+        data = Util.concat(secret, token.getEncoded(false), proofs);
+        cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_REDEEM,
+                (byte) 0,
+                (byte) 0,
+                data
+        );
+        responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+        Assertions.assertArrayEquals(new byte[0], responseAPDU.getData());
     }
 
     public void swapSingle(boolean precomputed) throws Exception {

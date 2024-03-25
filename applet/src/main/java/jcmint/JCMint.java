@@ -67,6 +67,9 @@ public class JCMint extends Applet implements ExtendedLength {
                 case Consts.INS_SWAP_SINGLE:
                     swapSingle(apdu);
                     break;
+                case Consts.INS_REDEEM:
+                    redeem(apdu);
+                    break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
             }
@@ -251,36 +254,26 @@ public class JCMint extends Applet implements ExtendedLength {
         apdu.setOutgoingAndSend((short) 0, (short) (65 + 32 + 32));
     }
 
-    private void swap(APDU apdu) {
-        byte[] apduBuffer = apdu.getBuffer();
-        short recvLen = (short) (apdu.setIncomingAndReceive() + ISO7816.OFFSET_EXT_CDATA);
-        short written = 0;
-        while (recvLen > 0) {
-            Util.arrayCopyNonAtomic(apduBuffer, (short) 0, largeBuffer, written, recvLen);
-            written += recvLen;
-            recvLen = apdu.receiveBytes((short) 0);
-        }
-        apduBuffer = largeBuffer;
-
+    private void finishVerify(byte[] token, short tokenOffset, byte[] proofs, short proofsOffset) {
         BigNat e = bn1;
         BigNat s = bn2;
 
-        if (Util.arrayCompare(apduBuffer, ISO7816.OFFSET_EXT_CDATA, verifying, (short) 0, (short) 32) != 0) {
+        if (Util.arrayCompare(token, tokenOffset, verifying, (short) 0, (short) 32) != 0) {
             ISOException.throwIt(Consts.E_NOT_VERIFYING);
         }
 
         for (short i = 0; i < parties; ++i) {
             md.reset();
-            e.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65), (short) 32); // e
-            s.fromByteArray(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65 + 32), (short) 32); // s
+            e.fromByteArray(proofs, (short) (proofsOffset + i * (65 + 32 + 32) + 65), (short) 32); // e
+            s.fromByteArray(proofs, (short) (proofsOffset + i * (65 + 32 + 32) + 65 + 32), (short) 32); // s
 
             md.update(verifying, (short) (32 + 65), (short) 65); // X
-            md.update(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65); // Y
+            md.update(proofs, (short) (proofsOffset + i * (65 + 32 + 32)), (short) 65); // Y
             md.update(curve.G, (short) 0, (short) curve.G.length); // P
             md.update(partialKeys, (short) (65 * i), (short) 65); // Q
 
             // compute A
-            point2.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65);
+            point2.decode(proofs, (short) (proofsOffset + i * (65 + 32 + 32)), (short) 65);
             point2.multiplication(e);
             point2.negate();
 
@@ -299,14 +292,14 @@ public class JCMint extends Applet implements ExtendedLength {
             point1.getW(ramArray, (short) 0);
             md.doFinal(ramArray, (short) 0, (short) 65, ramArray, (short) 0); // B
 
-            if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32) + 65), ramArray, (short) 0, (short) 32) != 0) {
+            if (Util.arrayCompare(proofs, (short) (proofsOffset + i * (65 + 32 + 32) + 65), ramArray, (short) 0, (short) 32) != 0) {
                 ISOException.throwIt(Consts.E_VERIFICATION_FAILED_PROOF);
             }
         }
 
-        point1.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65), (short) 65);
+        point1.decode(proofs, proofsOffset, (short) 65);
         for (short i = 1; i < parties; ++i) {
-            point2.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65 + 65 + i * (65 + 32 + 32)), (short) 65);
+            point2.decode(proofs, (short) (proofsOffset + i * (65 + 32 + 32)), (short) 65);
             point1.add(point2);
         }
 
@@ -316,8 +309,14 @@ public class JCMint extends Applet implements ExtendedLength {
         }
 
         Util.arrayFillNonAtomic(verifying, (short) 0, (short) verifying.length, (byte) 0);
+    }
 
-        point1.decode(apduBuffer, (short) (ISO7816.OFFSET_EXT_CDATA + 32 + 65), (short) 65);
+    private void swap(APDU apdu) {
+        loadExtendedApdu(apdu);
+
+        finishVerify(largeBuffer, apdu.getOffsetCdata(), largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65 + 65));
+
+        point1.decode(largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65), (short) 65);
         point1.multiplication(secret);
         apdu.setOutgoingAndSend((short) 0, point1.getW(apdu.getBuffer(), (short) 0));
     }
@@ -347,5 +346,25 @@ public class JCMint extends Applet implements ExtendedLength {
         point1.decode(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65), (short) 65);
         point1.multiplication(secret);
         apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
+    }
+
+    private void redeem(APDU apdu) {
+        loadExtendedApdu(apdu);
+
+        finishVerify(largeBuffer, apdu.getOffsetCdata(), largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65));
+
+        apdu.setOutgoing();
+    }
+
+    private short loadExtendedApdu(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+        short recvLen = (short) (apdu.setIncomingAndReceive() + apdu.getOffsetCdata());
+        short written = 0;
+        while (recvLen > 0) {
+            Util.arrayCopyNonAtomic(apduBuffer, (short) 0, largeBuffer, written, recvLen);
+            written += recvLen;
+            recvLen = apdu.receiveBytes((short) 0);
+        }
+        return written;
     }
 }
