@@ -11,8 +11,8 @@ public class JCMint extends Applet implements ExtendedLength {
 
     private ResourceManager rm;
     private ECCurve curve;
-    private final MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
     private final RandomData randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+    private final MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
 
     private byte index;
     private byte parties;
@@ -21,9 +21,9 @@ public class JCMint extends Applet implements ExtendedLength {
 
     private ECPoint point1, point2;
     private BigNat bn1, bn2;
-    private final byte[] prefixBuffer = JCSystem.makeTransientByteArray((short) 36, JCSystem.CLEAR_ON_RESET);
     private final byte[] ramArray = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
     private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 512, JCSystem.CLEAR_ON_RESET);
+    private HashToCurve h2c;
 
     private final Ledger ledger = new Ledger();
     private final byte[] verifying = new byte[(short) (32 + 65 + 65)]; // (x, C, H(x))
@@ -117,6 +117,8 @@ public class JCMint extends Applet implements ExtendedLength {
 
         rm = new ResourceManager((short) 256);
         curve = new ECCurve(SecP256k1.p, SecP256k1.a, SecP256k1.b, SecP256k1.G, SecP256k1.r, rm);
+        h2c = new HashToCurve();
+
         secret = new BigNat((short) 32, JCSystem.MEMORY_TYPE_PERSISTENT, rm);
         partialKeys = new byte[65 * Consts.MAX_PARTIES];
         point1 = new ECPoint(curve);
@@ -161,45 +163,10 @@ public class JCMint extends Applet implements ExtendedLength {
     private void hashToCurve(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
 
-        h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+        h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
         apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
     }
 
-    private void h2c(byte[] data, short offset) {
-        Util.arrayFillNonAtomic(prefixBuffer, (short) 32, (short) 4, (byte) 0);
-        md.reset();
-        md.update(Consts.H2C_DOMAIN_SEPARATOR, (short) 0, (short) Consts.H2C_DOMAIN_SEPARATOR.length);
-        md.doFinal(data, offset, (short) 32, prefixBuffer, (short) 0);
-
-        for (short counter = 0; counter < (short) 256; ++counter) { // TODO consider increasing max number of iters
-            md.reset();
-            prefixBuffer[32] = (byte) (counter & 0xff);
-            md.doFinal(prefixBuffer, (short) 0, (short) prefixBuffer.length, ramArray, (short) 0);
-            if (point1.fromX(ramArray, (short) 0, (short) 32))
-                break;
-        }
-        if (!point1.isYEven())
-            point1.negate();
-    }
-
-    private void h2cPrecomputed(byte[] input, short inputOffset, byte[] result, short resultOffset) {
-        Util.arrayFillNonAtomic(prefixBuffer, (short) 32, (short) 4, (byte) 0);
-        md.reset();
-        md.update(Consts.H2C_DOMAIN_SEPARATOR, (short) 0, (short) Consts.H2C_DOMAIN_SEPARATOR.length);
-        md.doFinal(input, inputOffset, (short) 32, prefixBuffer, (short) 0);
-
-        md.reset();
-        md.doFinal(prefixBuffer, (short) 0, (short) prefixBuffer.length, ramArray, (short) 0);
-
-        if (Util.arrayCompare(ramArray, (short) 0, result, (short) (resultOffset + 1), (short) 32) != 0) {
-            ISOException.throwIt(Consts.E_INVALID_PRECOMPUTE);
-        }
-
-        point1.setW(result, resultOffset, (short) 65);
-
-        if (!point1.isYEven())
-            point1.negate();
-    }
 
     private void verify(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
@@ -215,9 +182,9 @@ public class JCMint extends Applet implements ExtendedLength {
 
         // DLEQ X
         if (precomputed == (byte) 1) {
-            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65));
+            h2c.hashPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65), point1);
         } else {
-            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+            h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
         }
         md.reset();
         point1.getW(verifying, (short) (32 + 65));
@@ -335,9 +302,9 @@ public class JCMint extends Applet implements ExtendedLength {
             ISOException.throwIt(Consts.E_ALREADY_SPENT);
 
         if (precomputed == (byte) 1) {
-            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 + 65));
+            h2c.hashPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 + 65), point1);
         } else {
-            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+            h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
         }
         point1.multiplication(secret);
 
@@ -370,9 +337,9 @@ public class JCMint extends Applet implements ExtendedLength {
             ISOException.throwIt(Consts.E_ALREADY_SPENT);
 
         if (precomputed == (byte) 1) {
-            h2cPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65));
+            h2c.hashPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65), point1);
         } else {
-            h2c(apduBuffer, ISO7816.OFFSET_CDATA);
+            h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
         }
         point1.multiplication(secret);
 
