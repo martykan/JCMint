@@ -25,7 +25,7 @@ public class JCMint extends Applet implements ExtendedLength {
     private HashToCurve h2c;
 
     private final Ledger ledger = new Ledger();
-    private final byte[] verifying = new byte[(short) (32 + 65 + 65)]; // (x, C, H(x))
+    private final byte[] verifying = new byte[(short) (32 + 65 + 65 + 65)]; // (x, C, H(x), k_iH(x))
     private boolean initialized = false;
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         new JCMint(bArray, bOffset, bLength);
@@ -198,6 +198,7 @@ public class JCMint extends Applet implements ExtendedLength {
         // DLEQ Y
         point1.multiplication(denominations[d].secret);
         point1.getW(apduBuffer, (short) 0);
+        point1.getW(verifying, (short) (32 + 65 + 65));
         point1.decode(verifying, (short) (32 + 65), (short) 65); // restore hashOutput
         md.update(apduBuffer, (short) 0, (short) 65);
 
@@ -238,6 +239,9 @@ public class JCMint extends Applet implements ExtendedLength {
         }
 
         for (short i = 0; i < parties; ++i) {
+            if (i == index) {
+                continue;
+            }
             md.reset();
             e.fromByteArray(proofs, (short) (proofsOffset + i * (65 + 32 + 32) + 65), (short) 32); // e
             s.fromByteArray(proofs, (short) (proofsOffset + i * (65 + 32 + 32) + 65 + 32), (short) 32); // s
@@ -272,8 +276,11 @@ public class JCMint extends Applet implements ExtendedLength {
             }
         }
 
-        point1.decode(proofs, proofsOffset, (short) 65);
-        for (short i = 1; i < parties; ++i) {
+        point1.decode(verifying, (short) (32 + 65 + 65), (short) 65);
+        for (short i = 0; i < parties; ++i) {
+            if (i == index) {
+                continue;
+            }
             point2.decode(proofs, (short) (proofsOffset + i * (65 + 32 + 32)), (short) 65);
             point1.add(point2);
         }
