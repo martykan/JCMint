@@ -21,7 +21,7 @@ public class JCMint extends Applet implements ExtendedLength {
     private ECPoint point1, point2;
     private BigNat bn1, bn2;
     private final byte[] ramArray = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
-    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 512, JCSystem.CLEAR_ON_RESET);
+    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 768, JCSystem.CLEAR_ON_RESET);
     private HashToCurve h2c;
 
     private final Ledger ledger = new Ledger();

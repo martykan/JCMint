@@ -46,14 +46,14 @@ public class PerformanceTest extends BaseTest {
 
     @Test
     public void measureVerifySwap() throws Exception {
-        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
             verifySwap(false, i);
         }
     }
 
     @Test
     public void measureVerifySwapPrecomputed() throws Exception {
-        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
             verifySwap(true, i);
         }
     }

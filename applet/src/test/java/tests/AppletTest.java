@@ -103,7 +103,7 @@ public class AppletTest extends BaseTest {
 
     @Test
     public void testSwap() throws Exception {
-        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
             verifySwap(false, i);
             verifySwap(true, i);
         }
@@ -144,8 +144,10 @@ public class AppletTest extends BaseTest {
 
     @Test
     public void testRedeem() throws Exception {
-        verifyRedeem(false, 1);
-        verifyRedeem(true, 1);
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
+            verifyRedeem(false, i);
+            verifyRedeem(true, i);
+        }
     }
 
     public void verifyRedeem(boolean precomputed, int parties) throws Exception {
