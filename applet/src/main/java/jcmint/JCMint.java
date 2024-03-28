@@ -21,7 +21,7 @@ public class JCMint extends Applet implements ExtendedLength {
     private ECPoint point1, point2;
     private BigNat bn1, bn2;
     private final byte[] ramArray = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
-    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 768, JCSystem.CLEAR_ON_RESET);
+    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 576, JCSystem.CLEAR_ON_RESET);
     private HashToCurve h2c;
 
     private final Ledger ledger = new Ledger();
@@ -123,7 +123,7 @@ public class JCMint extends Applet implements ExtendedLength {
         bn1 = new BigNat((short) 32, JCSystem.MEMORY_TYPE_TRANSIENT_RESET, rm);
         bn2 = new BigNat((short) 32, JCSystem.MEMORY_TYPE_TRANSIENT_RESET, rm);
 
-        for (int i = 0; i < (short) denominations.length; ++i) {
+        for (short i = 0; i < (short) denominations.length; ++i) {
             denominations[i] = new Denomination(rm);
         }
 
