@@ -4,6 +4,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.math.BigInteger;
 
+import cz.muni.fi.crocs.rcard.client.CardType;
 import cz.muni.fi.crocs.rcard.client.Util;
 import jcmint.Consts;
 import org.bouncycastle.math.ec.ECPoint;
@@ -11,6 +12,10 @@ import org.junit.jupiter.api.*;
 
 public class PerformanceTest extends BaseTest {
     private final long REPEAT = 100;
+
+    public PerformanceTest() {
+        setCardType(CardType.JCARDSIMLOCAL);
+    }
 
     @Test
     public void measureSwapSingle() throws Exception {
