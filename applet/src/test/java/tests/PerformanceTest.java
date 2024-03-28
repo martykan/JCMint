@@ -5,12 +5,12 @@ import java.io.PrintWriter;
 import java.math.BigInteger;
 
 import cz.muni.fi.crocs.rcard.client.Util;
+import jcmint.Consts;
 import org.bouncycastle.math.ec.ECPoint;
 import org.junit.jupiter.api.*;
 
 public class PerformanceTest extends BaseTest {
     private final long REPEAT = 100;
-
 
     @Test
     public void measureSwapSingle() throws Exception {
@@ -23,7 +23,8 @@ public class PerformanceTest extends BaseTest {
     }
 
     public void swapSingle(boolean precomputed) throws Exception {
-        PrintWriter file = new PrintWriter(new FileWriter(precomputed ? "swap_single_precomputed.csv" : "swap_single.csv", false));
+        String fileName = "swap_single" + (precomputed ? "_precomputed" : "") + ".csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
         ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
 
         BigInteger[] privateKeys = new BigInteger[1];
@@ -45,16 +46,21 @@ public class PerformanceTest extends BaseTest {
 
     @Test
     public void measureVerifySwap() throws Exception {
-        verifySwap(false, 1);
+        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+            verifySwap(false, i);
+        }
     }
 
     @Test
     public void measureVerifySwapPrecomputed() throws Exception {
-        verifySwap(true, 1);
+        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+            verifySwap(true, i);
+        }
     }
 
     public void verifySwap(boolean precomputed, int parties) throws Exception {
-        PrintWriter file = new PrintWriter(new FileWriter(precomputed ? "verify_swap_precomputed.csv" : "verify_swap.csv", false));
+        String fileName = "verify_swap_" + parties + (precomputed ? "_precomputed" : "") + ".csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
         ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
 
         BigInteger[] privateKeys = new BigInteger[parties];
@@ -79,6 +85,9 @@ public class PerformanceTest extends BaseTest {
                 proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[j], previousHashedPoint));
             }
             token = pm.swap(previousMessage, token, hashedPoint, proofs);
+            for (int j = 1; j < privateKeys.length; ++j) {
+                token = token.add(hashedPoint.multiply(privateKeys[j]));
+            }
             file.printf("%d\n", pm.cm.getLastTransmitTime());
         }
         file.close();
