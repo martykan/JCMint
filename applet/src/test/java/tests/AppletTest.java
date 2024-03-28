@@ -103,22 +103,37 @@ public class AppletTest extends BaseTest {
 
     @Test
     public void testSwap() throws Exception {
-        verifySwap(false, 1);
-        verifySwap(true, 1);
+        for (int i = 1; i < Consts.MAX_PARTIES; ++i) {
+            verifySwap(false, i);
+            verifySwap(true, i);
+        }
     }
 
     public void verifySwap(boolean precomputed, int parties) throws Exception {
         ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
-        BigInteger[] secrets = new BigInteger[parties];
-        ECPoint mintKey = pm.setup(secrets);
+        BigInteger[] privateKeys = new BigInteger[parties];
+        pm.setup(privateKeys);
         byte[] secret = new byte[32];
         ECPoint hashedPoint = pm.hashToCurve(secret);
         ECPoint token = pm.issue(hashedPoint);
+        for (int i = 0; i < parties; ++i) {
+            if (i == CARD_IDX) {
+                continue;
+            }
+            token = token.add(hashedPoint.multiply(privateKeys[i]));
+        }
 
-        byte[] proofs = pm.verify(secret, token, precomputed ? hashedPoint : null);
+        byte[] proofs = new byte[0];
+        for (int i = 0; i < parties; ++i) {
+            if (i == CARD_IDX) {
+                proofs = Util.concat(proofs, pm.verify(secret, token, precomputed ? hashedPoint : null));
+            } else {
+                proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[i], hashedPoint));
+            }
+        }
         // proofs = ProtocolManager.computeProof(secrets[0], hashedPoint);
         ECPoint newToken = pm.swap(secret, token, ProtocolManager.G, proofs);
-        Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
+        Assertions.assertArrayEquals(ProtocolManager.G.multiply(privateKeys[CARD_IDX]).getEncoded(false), newToken.getEncoded(false));
     }
 
     @Test
@@ -135,13 +150,27 @@ public class AppletTest extends BaseTest {
 
     public void verifyRedeem(boolean precomputed, int parties) throws Exception {
         ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
-        ECPoint mintKey = pm.setup(new BigInteger[parties]);
+        BigInteger[] privateKeys = new BigInteger[parties];
+        pm.setup(privateKeys);
 
         byte[] secret = new byte[32];
         ECPoint hashedPoint = pm.hashToCurve(secret);
         ECPoint token = pm.issue(hashedPoint);
+        for (int i = 0; i < parties; ++i) {
+            if (i == CARD_IDX) {
+                continue;
+            }
+            token = token.add(hashedPoint.multiply(privateKeys[i]));
+        }
 
-        byte[] proofs = pm.verify(secret, token, precomputed ? hashedPoint : null);
+        byte[] proofs = new byte[0];
+        for (int i = 0; i < parties; ++i) {
+            if (i == CARD_IDX) {
+                proofs = Util.concat(proofs, pm.verify(secret, token, precomputed ? hashedPoint : null));
+            } else {
+                proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[i], hashedPoint));
+            }
+        }
         Assertions.assertTrue(pm.redeem(secret, token, proofs));
     }
 
