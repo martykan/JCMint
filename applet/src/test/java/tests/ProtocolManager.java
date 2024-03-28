@@ -220,6 +220,10 @@ public class ProtocolManager {
     }
 
     public static ECPoint h2c(byte[] input) throws Exception {
+        return ProtocolManager.h2c(input, false);
+    }
+
+    public static ECPoint h2c(byte[] input, boolean precomputable) throws Exception {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update(Consts.H2C_DOMAIN_SEPARATOR);
         md.update(input);
@@ -234,7 +238,11 @@ public class ProtocolManager {
             byte[] x = md.digest();
             try {
                 return ecSpec.getCurve().decodePoint(Util.concat(new byte[]{0x02}, x));
-            } catch (IllegalArgumentException ignored) {}
+            } catch (IllegalArgumentException e) {
+                if (precomputable) {
+                    throw e;
+                }
+            }
         }
         return G;
     }
@@ -245,5 +253,19 @@ public class ProtocolManager {
             tmp = new BigInteger(bytes * 8, rnd);
         } while (tmp.toByteArray().length != bytes);
         return tmp;
+    }
+
+    public static byte[] randomMessage(boolean precomputable) {
+        byte[] message;
+        boolean found = false;
+        do {
+            message = ProtocolManager.randomBigInt(32).toByteArray();
+            try {
+                ProtocolManager.h2c(message, precomputable);
+                found = true;
+            } catch (Exception ignored) {}
+        } while (!found);
+
+        return message;
     }
 }
