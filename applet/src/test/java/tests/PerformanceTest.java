@@ -76,7 +76,7 @@ public class PerformanceTest extends BaseTest {
             hashedPoint = ProtocolManager.h2c(message);
 
             for (int j = 1; j < privateKeys.length; ++j) {
-                proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[j], previousHashedPoint, ProtocolManager.G.multiply(privateKeys[j])));
+                proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[j], previousHashedPoint));
             }
             token = pm.swap(previousMessage, token, hashedPoint, proofs);
             file.printf("%d\n", pm.cm.getLastTransmitTime());

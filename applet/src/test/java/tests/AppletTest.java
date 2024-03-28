@@ -116,7 +116,7 @@ public class AppletTest extends BaseTest {
         ECPoint token = pm.issue(hashedPoint);
 
         byte[] proofs = pm.verify(secret, token, precomputed ? hashedPoint : null);
-        // proofs = ProtocolManager.computeProof(secrets[0], hashedPoint, mintKey);
+        // proofs = ProtocolManager.computeProof(secrets[0], hashedPoint);
         ECPoint newToken = pm.swap(secret, token, ProtocolManager.G, proofs);
         Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
     }

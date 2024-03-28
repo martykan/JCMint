@@ -176,7 +176,7 @@ public class ProtocolManager {
         return true;
     }
 
-    public static byte[] computeProof(BigInteger secret, ECPoint hashedPoint, ECPoint partialMintKey) throws Exception {
+    public static byte[] computeProof(BigInteger secret, ECPoint hashedPoint) throws Exception {
         ECPoint verifyingPoint = hashedPoint.multiply(secret);
 
         BigInteger r = randomBigInt(32);
@@ -188,7 +188,7 @@ public class ProtocolManager {
         md.update(hashedPoint.getEncoded(false));
         md.update(verifyingPoint.getEncoded(false));
         md.update(ecSpec.getG().getEncoded(false));
-        md.update(partialMintKey.getEncoded(false));
+        md.update(ecSpec.getG().multiply(secret).getEncoded(false));
         md.update(A.getEncoded(false));
         md.update(B.getEncoded(false));
 
@@ -196,7 +196,7 @@ public class ProtocolManager {
         BigInteger s = e.multiply(secret).add(r).mod(ecSpec.getN());
         byte[] proof = Util.concat(verifyingPoint.getEncoded(false), Util.trimLeadingZeroes(e.toByteArray()), Util.trimLeadingZeroes(s.toByteArray()));
 
-        Assertions.assertTrue(verifyProof(hashedPoint, partialMintKey, proof));
+        Assertions.assertTrue(verifyProof(hashedPoint, ecSpec.getG().multiply(secret), proof));
         return proof;
     }
 
