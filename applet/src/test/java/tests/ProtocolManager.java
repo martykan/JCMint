@@ -39,7 +39,7 @@ public class ProtocolManager {
         for (int i = 1; i < secrets.length; ++i) {
             mintKey = mintKey.add(points[i]);
         }
-        byte[] data = secrets[card_idx].toByteArray();
+        byte[] data = encodeBigInteger(secrets[card_idx]);
         for (int i = 0; i < secrets.length; ++i) {
             data = Util.concat(data, points[i].getEncoded(false));
         }
@@ -194,7 +194,7 @@ public class ProtocolManager {
 
         BigInteger e = new BigInteger(1, md.digest());
         BigInteger s = e.multiply(secret).add(r).mod(ecSpec.getN());
-        byte[] proof = Util.concat(verifyingPoint.getEncoded(false), Util.trimLeadingZeroes(e.toByteArray()), Util.trimLeadingZeroes(s.toByteArray()));
+        byte[] proof = Util.concat(verifyingPoint.getEncoded(false), encodeBigInteger(e), encodeBigInteger(s));
 
         Assertions.assertTrue(verifyProof(hashedPoint, ecSpec.getG().multiply(secret), proof));
         return proof;
@@ -220,7 +220,7 @@ public class ProtocolManager {
     }
 
     public static ECPoint h2c(byte[] input) throws Exception {
-        return ProtocolManager.h2c(input, false);
+        return h2c(input, false);
     }
 
     public static ECPoint h2c(byte[] input, boolean precomputable) throws Exception {
@@ -248,20 +248,25 @@ public class ProtocolManager {
     }
 
     public static BigInteger randomBigInt(int bytes) {
-        BigInteger tmp;
-        do {
-            tmp = new BigInteger(bytes * 8, rnd);
-        } while (tmp.toByteArray().length != bytes);
-        return tmp;
+        return new BigInteger(bytes * 8, rnd);
+    }
+
+    public static byte[] encodeBigInteger(BigInteger x) {
+        byte[] encoded = Util.trimLeadingZeroes(x.toByteArray());
+        assert encoded.length <= 32;
+        while (encoded.length != 32) {
+            encoded = Util.concat(new byte[1], encoded);
+        }
+        return encoded;
     }
 
     public static byte[] randomMessage(boolean precomputable) {
         byte[] message;
         boolean found = false;
         do {
-            message = ProtocolManager.randomBigInt(32).toByteArray();
+            message = encodeBigInteger(randomBigInt(32));
             try {
-                ProtocolManager.h2c(message, precomputable);
+                h2c(message, precomputable);
                 found = true;
             } catch (Exception ignored) {}
         } while (!found);
