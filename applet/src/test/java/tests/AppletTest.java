@@ -1,134 +1,64 @@
 package tests;
 
-import cz.muni.fi.crocs.rcard.client.CardManager;
 import cz.muni.fi.crocs.rcard.client.Util;
 import javacard.framework.ISO7816;
-import java.security.MessageDigest;
 import jcmint.Consts;
 import cz.muni.fi.crocs.rcard.client.CardType;
-import org.bouncycastle.jce.ECNamedCurveTable;
-import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.math.ec.ECPoint;
-import org.bouncycastle.util.encoders.Hex;
 import org.junit.jupiter.api.*;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.Random;
 
 public class AppletTest extends BaseTest {
-    private final Random rnd = new Random();
-    private final ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    private final byte CARD_IDX = 0;
     public AppletTest() {
         setCardType(CardType.JCARDSIMLOCAL);
         setSimulateStateful(false);
     }
 
-    public ECPoint setup(CardManager cm, int parties) throws Exception {
-        BigInteger[] secrets = new BigInteger[parties];
-        ECPoint[] points = new ECPoint[parties];
-        for (int i = 0; i < parties; ++i) {
-            secrets[i] = randomBigInt(32);
-            points[i] = ecSpec.getG().multiply(secrets[i]);
-        }
-        ECPoint mintKey = points[0];
-        for (int i = 1; i < parties; ++i) {
-            mintKey = mintKey.add(points[i]);
-        }
-        byte[] data = secrets[0].toByteArray();
-        for (int i = 0; i < parties; ++i) {
-            data = Util.concat(data, points[i].getEncoded(false));
-        }
-
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_SETUP,
-                (byte) 0, // card index
-                parties,
-                data
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(mintKey.getEncoded(false), responseAPDU.getData());
-        return mintKey;
-    }
 
     @Test
     public void testSetup() throws Exception {
-        CardManager cm = connect();
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
         for (int parties = 1; parties <= Consts.MAX_PARTIES; ++parties) {
-            setup(cm, parties);
+            BigInteger[] secrets = new BigInteger[parties];
+            pm.setup(secrets);
         }
     }
 
     @Test
     public void testIssue() throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+        for(int i = 1; i <= Consts.MAX_PARTIES; ++i) {
+            if (CARD_IDX >= i) {
+                continue;
+            }
+            ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+            BigInteger[] secrets = new BigInteger[i];
+            pm.setup(secrets);
 
-        BigInteger scalar = randomBigInt(32);
-        ECPoint challenge = ecSpec.getG().multiply(scalar);
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_ISSUE,
-                (byte) 0,
-                (byte) 0,
-                challenge.getEncoded(false)
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(mintKey.multiply(scalar).getEncoded(false), responseAPDU.getData());
-        // TODO test with more than 1 party requires checking against partial keys
+            BigInteger scalar = ProtocolManager.randomBigInt(32);
+            ECPoint challenge = ProtocolManager.G.multiply(scalar);
+            ECPoint output = pm.issue(challenge);
+            Assertions.assertArrayEquals(challenge.multiply(secrets[CARD_IDX]).getEncoded(false), output.getEncoded(false));
+        }
     }
 
     @Test
     public void testHashToCurve() throws Exception {
-        CardManager cm = connect();
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
         byte[] data = new byte[32];
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                data
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(Util.hexStringToByteArray("044cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a72532e97a708760bfdc863bc2731ce604c7b7cb9df2a55410f18ce031fc1dcfb18e"), responseAPDU.getData());
+        Assertions.assertArrayEquals(Util.hexStringToByteArray("044cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a72532e97a708760bfdc863bc2731ce604c7b7cb9df2a55410f18ce031fc1dcfb18e"), pm.hashToCurve(data).getEncoded(false));
         data[31] = 0x01;
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(Util.hexStringToByteArray("042e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf7b22eee931599a72e1df1628c605c47a9f282944e97f67ba52f79e2a18ac77f8"), responseAPDU.getData());
+        Assertions.assertArrayEquals(Util.hexStringToByteArray("042e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf7b22eee931599a72e1df1628c605c47a9f282944e97f67ba52f79e2a18ac77f8"), pm.hashToCurve(data).getEncoded(false));
         data[31] = 0x02;
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(Util.hexStringToByteArray("046cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f7231a9756caa84811bfe53cb35b626fc0faa43ccd436d07369813b55831584ac"), responseAPDU.getData());
+        Assertions.assertArrayEquals(Util.hexStringToByteArray("046cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f7231a9756caa84811bfe53cb35b626fc0faa43ccd436d07369813b55831584ac"), pm.hashToCurve(data).getEncoded(false));
     }
 
     @Test
     public void testUnknownInstruction() throws Exception {
-        CardManager cm = connect();
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
         CommandAPDU cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
                 (byte) 0x12,
@@ -136,136 +66,59 @@ public class AppletTest extends BaseTest {
                 (byte) 0x56,
                 new byte[0]
         );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
+        ResponseAPDU responseAPDU = pm.cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(responseAPDU.getSW(), ISO7816.SW_INS_NOT_SUPPORTED);
     }
 
     @Test
     public void testVerifyFail() throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        pm.setup(new BigInteger[1]);
 
+        pm.verify(new byte[32], ProtocolManager.G, null);
         CommandAPDU cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
                 Consts.INS_VERIFY,
                 (byte) 0,
                 (byte) 0,
-                Util.concat(new byte[32], ecSpec.getG().getEncoded(false))
+                Util.concat(new byte[32], ProtocolManager.G.getEncoded(false))
         );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-
-        responseAPDU = cm.transmit(cmd);
+        ResponseAPDU responseAPDU = pm.cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(Consts.E_ALREADY_SPENT & 0xffff, responseAPDU.getSW());
     }
 
     @Test
     public void testVerifyProof() throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        ECPoint mintKey = pm.setup(new BigInteger[1]);
+        byte[] secret = new byte[32];
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        byte[] data = Util.concat(new byte[32], ProtocolManager.G.getEncoded(false));
+        byte[] proof = pm.verify(new byte[32], ProtocolManager.G, null);
 
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_VERIFY,
-                (byte) 0,
-                (byte) 0,
-                Util.concat(new byte[32], ecSpec.getG().getEncoded(false))
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-
-        byte[] encodedVerifyingPoint = Arrays.copyOfRange(responseAPDU.getData(), 0, 65);
-        BigInteger e = new BigInteger(1, Arrays.copyOfRange(responseAPDU.getData(), 65, 65 + 32));
-        BigInteger s = new BigInteger(1, Arrays.copyOfRange(responseAPDU.getData(), 65 + 32, 65 + 32 + 32));
-
-        ECPoint X = ecSpec.getCurve().decodePoint(Hex.decode("044cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a72532e97a708760bfdc863bc2731ce604c7b7cb9df2a55410f18ce031fc1dcfb18e"));
-        ECPoint Y = ecSpec.getCurve().decodePoint(encodedVerifyingPoint);
-        ECPoint P = ecSpec.getG();
-        ECPoint Q = mintKey;
-
-        ECPoint A = X.multiply(s).subtract(Y.multiply(e));
-        ECPoint B = P.multiply(s).subtract(Q.multiply(e));
-
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        md.update(X.getEncoded(false));
-        md.update(Y.getEncoded(false));
-        md.update(P.getEncoded(false));
-        md.update(Q.getEncoded(false));
-        md.update(A.getEncoded(false));
-        md.update(B.getEncoded(false));
-        BigInteger result = new BigInteger(1, md.digest());
-        Assertions.assertEquals(e, result);
+        Assertions.assertTrue(ProtocolManager.verifyProof(hashedPoint, mintKey, proof));
     }
 
     @Test
     public void testSwap() throws Exception {
-        swap(false);
-        swap(true);
+        verifySwap(false, 1);
+        verifySwap(true, 1);
     }
 
-    public void swap(boolean precomputed) throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
-
+    public void verifySwap(boolean precomputed, int parties) throws Exception {
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        BigInteger[] secrets = new BigInteger[parties];
+        ECPoint mintKey = pm.setup(secrets);
         byte[] secret = new byte[32];
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                secret
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint hashedPoint = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        ECPoint token = pm.issue(hashedPoint);
 
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_ISSUE,
-                (byte) 0,
-                (byte) 0,
-                hashedPoint.getEncoded(false)
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
-
-        byte[] data = Util.concat(secret, token.getEncoded(false));
-        if (precomputed) {
-            data = Util.concat(data, hashedPoint.getEncoded(false));
-        }
-
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_VERIFY,
-                (byte) (precomputed ? 1 : 0),
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        byte[] proofs = responseAPDU.getData();
-
-        data = Util.concat(secret, token.getEncoded(false), ecSpec.getG().getEncoded(false));
-        data = Util.concat(data, proofs);
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_SWAP,
-                (byte) 0,
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(mintKey.getEncoded(false), responseAPDU.getData());
+        byte[] proofs = pm.verify(secret, token, precomputed ? hashedPoint : null);
+        // proofs = ProtocolManager.computeProof(secrets[0], hashedPoint, mintKey);
+        ECPoint newToken = pm.swap(secret, token, ProtocolManager.G, proofs);
+        Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
     }
 
     @Test
@@ -276,114 +129,32 @@ public class AppletTest extends BaseTest {
 
     @Test
     public void testRedeem() throws Exception {
-        redeem(false);
-        redeem(true);
+        verifyRedeem(false, 1);
+        verifyRedeem(true, 1);
     }
 
-    public void redeem(boolean precomputed) throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+    public void verifyRedeem(boolean precomputed, int parties) throws Exception {
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        ECPoint mintKey = pm.setup(new BigInteger[parties]);
 
         byte[] secret = new byte[32];
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                secret
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint hashedPoint = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        ECPoint token = pm.issue(hashedPoint);
 
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_ISSUE,
-                (byte) 0,
-                (byte) 0,
-                hashedPoint.getEncoded(false)
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
-
-        byte[] data = Util.concat(secret, token.getEncoded(false));
-        if (precomputed) {
-            data = Util.concat(data, hashedPoint.getEncoded(false));
-        }
-
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_VERIFY,
-                (byte) (precomputed ? 1 : 0),
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        byte[] proofs = responseAPDU.getData();
-
-        data = Util.concat(secret, token.getEncoded(false), proofs);
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_REDEEM,
-                (byte) 0,
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(new byte[0], responseAPDU.getData());
+        byte[] proofs = pm.verify(secret, token, precomputed ? hashedPoint : null);
+        Assertions.assertTrue(pm.redeem(secret, token, proofs));
     }
 
     public void swapSingle(boolean precomputed) throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        ECPoint mintKey = pm.setup(new BigInteger[1]);
 
         byte[] secret = new byte[32];
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                secret
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint hashedPoint = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        ECPoint token = pm.issue(hashedPoint);
 
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_ISSUE,
-                (byte) 0,
-                (byte) 0,
-                hashedPoint.getEncoded(false)
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
-
-        byte[] data = Util.concat(secret, token.getEncoded(false), ecSpec.getG().getEncoded(false));
-        if (precomputed) {
-            data = Util.concat(data, hashedPoint.getEncoded(false));
-        }
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_SWAP_SINGLE,
-                (byte) (precomputed ? 1 : 0),
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(mintKey.getEncoded(false), responseAPDU.getData());
+        ECPoint newToken = pm.swapSingle(secret, token, ProtocolManager.G, precomputed ? hashedPoint : null);
+        Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
     }
 
     @Test
@@ -393,56 +164,13 @@ public class AppletTest extends BaseTest {
     }
 
     public void redeemSingle(boolean precomputed) throws Exception {
-        CardManager cm = connect();
-        ECPoint mintKey = setup(cm, 1);
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        ECPoint mintKey = pm.setup(new BigInteger[1]);
 
         byte[] secret = new byte[32];
-        CommandAPDU cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_HASH_TO_CURVE,
-                (byte) 0,
-                (byte) 0,
-                secret
-        );
-        ResponseAPDU responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint hashedPoint = ecSpec.getCurve().decodePoint(responseAPDU.getData());
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        ECPoint token = pm.issue(hashedPoint);
 
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_ISSUE,
-                (byte) 0,
-                (byte) 0,
-                hashedPoint.getEncoded(false)
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        ECPoint token = ecSpec.getCurve().decodePoint(responseAPDU.getData());
-
-        byte[] data = Util.concat(secret, token.getEncoded(false));
-        if (precomputed) {
-            data = Util.concat(data, hashedPoint.getEncoded(false));
-        }
-        cmd = new CommandAPDU(
-                Consts.CLA_JCMINT,
-                Consts.INS_REDEEM_SINGLE,
-                (byte) (precomputed ? 1 : 0),
-                (byte) 0,
-                data
-        );
-        responseAPDU = cm.transmit(cmd);
-        Assertions.assertNotNull(responseAPDU);
-        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(new byte[0], responseAPDU.getData());
-    }
-
-    private BigInteger randomBigInt(int bytes) {
-        BigInteger tmp;
-        do {
-            tmp = new BigInteger(bytes * 8, rnd);
-        } while (tmp.toByteArray().length != bytes);
-        return tmp;
+        Assertions.assertTrue(pm.redeemSingle(secret, token, precomputed ? hashedPoint : null));
     }
 }
