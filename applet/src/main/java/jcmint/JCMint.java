@@ -21,7 +21,7 @@ public class JCMint extends Applet implements ExtendedLength {
     private ECPoint point1, point2;
     private BigNat bn1, bn2;
     private final byte[] ramArray = JCSystem.makeTransientByteArray((short) 65, JCSystem.CLEAR_ON_RESET);
-    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 576, JCSystem.CLEAR_ON_RESET);
+    private final byte[] largeBuffer = JCSystem.makeTransientByteArray((short) 814, JCSystem.CLEAR_ON_RESET);
     private HashToCurve h2c;
 
     private final Ledger ledger = new Ledger();
@@ -131,14 +131,14 @@ public class JCMint extends Applet implements ExtendedLength {
     }
 
     private void setup(APDU apdu) {
-        byte[] apduBuffer = apdu.getBuffer();
-        index = apduBuffer[ISO7816.OFFSET_P1];
-        parties = apduBuffer[ISO7816.OFFSET_P2];
+        byte[] buffer = loadApdu(apdu);
+        index = buffer[ISO7816.OFFSET_P1];
+        parties = buffer[ISO7816.OFFSET_P2];
         if (parties < 1 || parties > Consts.MAX_PARTIES) {
             ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
         }
         for (short i = 0; i < (short) denominations.length; ++i) {
-            denominations[i].setup(parties, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32));
+            denominations[i].setup(parties, buffer, apdu.getOffsetCdata(), buffer, (short) (apdu.getOffsetCdata() + 32));
         }
 
         ECPoint mintKey = point2;
@@ -150,7 +150,7 @@ public class JCMint extends Applet implements ExtendedLength {
         }
         ledger.reset();
 
-        apdu.setOutgoingAndSend((short) 0, mintKey.getW(apduBuffer, (short) 0));
+        apdu.setOutgoingAndSend((short) 0, mintKey.getW(apdu.getBuffer(), (short) 0));
     }
 
     private void issue(APDU apdu) {
@@ -294,12 +294,12 @@ public class JCMint extends Applet implements ExtendedLength {
     }
 
     private void swap(APDU apdu) {
-        loadExtendedApdu(apdu);
-        byte d = largeBuffer[ISO7816.OFFSET_P2];
+        byte[] buffer = loadApdu(apdu);
+        byte d = buffer[ISO7816.OFFSET_P2];
 
-        finishVerify(d, largeBuffer, apdu.getOffsetCdata(), largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65 + 65));
+        finishVerify(d, buffer, apdu.getOffsetCdata(), buffer, (short) (apdu.getOffsetCdata() + 32 + 65 + 65));
 
-        point1.decode(largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65), (short) 65);
+        point1.decode(buffer, (short) (apdu.getOffsetCdata() + 32 + 65), (short) 65);
         point1.multiplication(denominations[d].secret);
         apdu.setOutgoingAndSend((short) 0, point1.getW(apdu.getBuffer(), (short) 0));
     }
@@ -333,10 +333,10 @@ public class JCMint extends Applet implements ExtendedLength {
     }
 
     private void redeem(APDU apdu) {
-        loadExtendedApdu(apdu);
-        byte d = largeBuffer[ISO7816.OFFSET_P2];
+        byte[] buffer = loadApdu(apdu);
+        byte d = buffer[ISO7816.OFFSET_P2];
 
-        finishVerify(d, largeBuffer, apdu.getOffsetCdata(), largeBuffer, (short) (apdu.getOffsetCdata() + 32 + 65));
+        finishVerify(d, buffer, apdu.getOffsetCdata(), buffer, (short) (apdu.getOffsetCdata() + 32 + 65));
 
         apdu.setOutgoing();
     }
@@ -367,15 +367,18 @@ public class JCMint extends Applet implements ExtendedLength {
         apdu.setOutgoing();
     }
 
-    private short loadExtendedApdu(APDU apdu) {
+    private byte[] loadApdu(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
         short recvLen = (short) (apdu.setIncomingAndReceive() + apdu.getOffsetCdata());
+        if (apdu.getOffsetCdata() == ISO7816.OFFSET_CDATA) {
+            return apduBuffer;
+        }
         short written = 0;
         while (recvLen > 0) {
             Util.arrayCopyNonAtomic(apduBuffer, (short) 0, largeBuffer, written, recvLen);
             written += recvLen;
             recvLen = apdu.receiveBytes((short) 0);
         }
-        return written;
+        return largeBuffer;
     }
 }
