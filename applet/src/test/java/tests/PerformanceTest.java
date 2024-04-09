@@ -18,6 +18,35 @@ public class PerformanceTest extends BaseTest {
     }
 
     @Test
+    public void measureRedeemSingle() throws Exception {
+        redeemSingle(false);
+    }
+
+    @Test
+    public void measureRedeemSinglePrecomputed() throws Exception {
+        redeemSingle(true);
+    }
+
+    public void redeemSingle(boolean precomputed) throws Exception {
+        String fileName = "redeem_single" + (precomputed ? "_precomputed" : "") + ".csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
+        ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
+
+        BigInteger[] privateKeys = new BigInteger[1];
+        pm.setup(privateKeys);
+
+        for (int i = 0; i < REPEAT; ++i) {
+            byte[] message = ProtocolManager.randomMessage(precomputed);
+            ECPoint hashedPoint = ProtocolManager.h2c(message);
+            ECPoint token = pm.issue(hashedPoint);
+            file.printf("%d,", pm.cm.getLastTransmitTime());
+            pm.swapSingle(message, token, hashedPoint, precomputed ? hashedPoint : null);
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
+    }
+
+    @Test
     public void measureSwapSingle() throws Exception {
         swapSingle(false);
     }
@@ -63,6 +92,20 @@ public class PerformanceTest extends BaseTest {
         }
     }
 
+    @Test
+    public void measureVerifyRedeem() throws Exception {
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
+            verifyRedeem(false, i);
+        }
+    }
+
+    @Test
+    public void measureVerifyRedeemPrecomputed() throws Exception {
+        for (int i = 1; i <= Consts.MAX_PARTIES; ++i) {
+            verifyRedeem(true, i);
+        }
+    }
+
     public void verifySwap(boolean precomputed, int parties) throws Exception {
         String fileName = "verify_swap_" + parties + (precomputed ? "_precomputed" : "") + ".csv";
         PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
@@ -98,4 +141,30 @@ public class PerformanceTest extends BaseTest {
         file.close();
     }
 
+    public void verifyRedeem(boolean precomputed, int parties) throws Exception {
+        String fileName = "verify_redeem_" + parties + (precomputed ? "_precomputed" : "") + ".csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
+        ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
+
+        BigInteger[] privateKeys = new BigInteger[parties];
+        pm.setup(privateKeys);
+        for (int i = 0; i < REPEAT; ++i) {
+            byte[] message = ProtocolManager.randomMessage(precomputed);
+            ECPoint hashedPoint = ProtocolManager.h2c(message);
+            ECPoint token = pm.issue(hashedPoint);
+            file.printf("%d,", pm.cm.getLastTransmitTime());
+            for (int j = 1; j < privateKeys.length; ++j) {
+                token = token.add(hashedPoint.multiply(privateKeys[j]));
+            }
+
+            byte[] proofs = pm.verify(message, token, precomputed ? hashedPoint : null);
+            file.printf("%d,", pm.cm.getLastTransmitTime());
+            for (int j = 1; j < privateKeys.length; ++j) {
+                proofs = Util.concat(proofs, ProtocolManager.computeProof(privateKeys[j], hashedPoint));
+            }
+            pm.redeem(message, token, proofs);
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
+    }
 }
