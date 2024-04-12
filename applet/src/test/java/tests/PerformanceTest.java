@@ -106,6 +106,17 @@ public class PerformanceTest extends BaseTest {
         }
     }
 
+    @Test
+    public void measureNop() throws Exception {
+        String fileName = "nop.csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
+        ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
+        for (int i = 0; i < REPEAT; ++i) {
+            pm.nop();
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+    }
+
     public void verifySwap(boolean precomputed, int parties) throws Exception {
         String fileName = "verify_swap_" + parties + (precomputed ? "_precomputed" : "") + ".csv";
         PrintWriter file = new PrintWriter(new FileWriter(fileName, false));

@@ -72,6 +72,9 @@ public class JCMint extends Applet implements ExtendedLength {
                 case Consts.INS_REDEEM_SINGLE:
                     redeemSingle(apdu);
                     break;
+                case Consts.INS_NOP:
+                    apdu.setOutgoing();
+                    break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
             }
