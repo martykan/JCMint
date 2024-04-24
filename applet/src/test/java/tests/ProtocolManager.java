@@ -237,17 +237,17 @@ public class ProtocolManager {
     }
 
     public static ECPoint h2c(byte[] input) throws Exception {
-        return h2c(input, false);
+        return h2c(input, 256);
     }
 
-    public static ECPoint h2c(byte[] input, boolean precomputable) throws Exception {
+    public static ECPoint h2c(byte[] input, int maxIters) throws Exception {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update(Consts.H2C_DOMAIN_SEPARATOR);
         md.update(input);
         byte[] prefix = md.digest();
         byte[] counter = new byte[4];
 
-        for (short i = 0; i < (short) 256; ++i) { // TODO consider increasing max number of iters
+        for (short i = 0; ; ++i) { // TODO consider increasing max number of iters
             md.reset();
             md.update(prefix);
             counter[0] = (byte) (i & 0xff);
@@ -256,12 +256,10 @@ public class ProtocolManager {
             try {
                 return ecSpec.getCurve().decodePoint(Util.concat(new byte[]{0x02}, x));
             } catch (IllegalArgumentException e) {
-                if (precomputable) {
+                if (i + 1 >= maxIters)
                     throw e;
-                }
             }
         }
-        return G;
     }
 
     public static BigInteger randomBigInt(int bytes) {
@@ -283,8 +281,30 @@ public class ProtocolManager {
         do {
             message = encodeBigInteger(randomBigInt(32));
             try {
-                h2c(message, precomputable);
+                h2c(message, precomputable ? 1 : 256);
                 found = true;
+            } catch (Exception ignored) {}
+        } while (!found);
+
+        return message;
+    }
+
+    public static byte[] randomMessage(int repeats) {
+        byte[] message;
+        boolean found = false;
+        do {
+            message = encodeBigInteger(randomBigInt(32));
+            try {
+                h2c(message, repeats);
+                if (repeats > 1) {
+                    try {
+                        h2c(message, repeats - 1);
+                    } catch (Exception ignored) {
+                        found = true;
+                    }
+                } else {
+                    found = true;
+                }
             } catch (Exception ignored) {}
         } while (!found);
 

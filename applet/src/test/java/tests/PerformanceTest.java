@@ -134,6 +134,26 @@ public class PerformanceTest extends BaseTest {
         file.close();
     }
 
+    @Test
+    public void measureH2c() throws Exception {
+        String fileName = "h2c_first.csv";
+        PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
+        ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
+        for (int i = 0; i < REPEAT; ++i) {
+            pm.hashToCurve(ProtocolManager.randomMessage(1));
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
+        fileName = "h2c_second.csv";
+        file = new PrintWriter(new FileWriter(fileName, false));
+        pm = new ProtocolManager(connect(), (byte) 0);
+        for (int i = 0; i < REPEAT; ++i) {
+            pm.hashToCurve(ProtocolManager.randomMessage(2));
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
+    }
+
     public void verifySwap(boolean precomputed, int parties) throws Exception {
         String fileName = "verify_swap_" + parties + (precomputed ? "_precomputed" : "") + ".csv";
         PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
