@@ -176,17 +176,21 @@ public class ProtocolManager {
         return true;
     }
 
-    public void nop() throws Exception {
+    public void nop(byte[] data) throws Exception {
+        nop(data, 0);
+    }
+
+    public void nop(byte[] data, int outputSize) throws Exception {
         CommandAPDU cmd = new CommandAPDU(
                 Consts.CLA_JCMINT,
                 Consts.INS_NOP,
+                (byte) (outputSize & 0xff),
                 (byte) 0,
-                (byte) 0
+                data
         );
         ResponseAPDU responseAPDU = cm.transmit(cmd);
         Assertions.assertNotNull(responseAPDU);
         Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
-        Assertions.assertArrayEquals(new byte[0], responseAPDU.getData());
     }
 
     public static byte[] computeProof(BigInteger secret, ECPoint hashedPoint) throws Exception {

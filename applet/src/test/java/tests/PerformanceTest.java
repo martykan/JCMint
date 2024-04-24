@@ -108,13 +108,30 @@ public class PerformanceTest extends BaseTest {
 
     @Test
     public void measureNop() throws Exception {
-        String fileName = "nop.csv";
+        String fileName = "nop_0b.csv";
         PrintWriter file = new PrintWriter(new FileWriter(fileName, false));
         ProtocolManager pm = new ProtocolManager(connect(), (byte) 0);
         for (int i = 0; i < REPEAT; ++i) {
-            pm.nop();
+            pm.nop(new byte[0]);
             file.printf("%d\n", pm.cm.getLastTransmitTime());
         }
+        file.close();
+        fileName = "nop_768b.csv";
+        file = new PrintWriter(new FileWriter(fileName, false));
+        pm = new ProtocolManager(connect(), (byte) 0);
+        for (int i = 0; i < REPEAT; ++i) {
+            pm.nop(new byte[768]);
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
+        fileName = "nop_768b_250b.csv";
+        file = new PrintWriter(new FileWriter(fileName, false));
+        pm = new ProtocolManager(connect(), (byte) 0);
+        for (int i = 0; i < REPEAT; ++i) {
+            pm.nop(new byte[768], 250);
+            file.printf("%d\n", pm.cm.getLastTransmitTime());
+        }
+        file.close();
     }
 
     public void verifySwap(boolean precomputed, int parties) throws Exception {

@@ -73,7 +73,7 @@ public class JCMint extends Applet implements ExtendedLength {
                     redeemSingle(apdu);
                     break;
                 case Consts.INS_NOP:
-                    apdu.setOutgoing();
+                    nop(apdu);
                     break;
                 default:
                     ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -368,6 +368,12 @@ public class JCMint extends Applet implements ExtendedLength {
 
         ledger.append(apduBuffer, ISO7816.OFFSET_CDATA);
         apdu.setOutgoing();
+    }
+
+    private void nop(APDU apdu) {
+        byte[] apduBuffer = loadApdu(apdu);
+        short p1 = (short) (apduBuffer[ISO7816.OFFSET_P1] & 0xff);
+        apdu.setOutgoingAndSend((short) 0, p1);
     }
 
     private byte[] loadApdu(APDU apdu) {
