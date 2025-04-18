@@ -6,16 +6,20 @@ version '1.0-SNAPSHOT'
 buildscript {
     repositories {
         mavenCentral()
-        maven { url "https://javacard.pro/maven" }
+        maven { url "https://mvn.javacard.pro/maven" }
         maven { url "https://deadcode.me/mvn" }
+        maven { url 'https://jitpack.io' }
         // mavenLocal()
     }
     dependencies {
-        classpath 'com.klinec:gradle-javacard:1.8.0'
+        // https://github.com/J08nY/javacard-gradle-plugin
+        classpath 'com.github.martykan:javacard-gradle-plugin:20c4bbe8a2'
+        //classpath 'com.klinec:gradle-javacard:1.8.0'
     }
 }
 
-apply plugin: 'com.klinec.gradle.javacard'
+apply plugin: 'sk.neuromancer.gradle.javacard'
+//apply plugin: 'com.klinec.gradle.javacard'
 apply plugin: 'idea'
 sourceCompatibility = 1.8
 
@@ -27,11 +31,13 @@ final def libsSdk = rootPath + '/libs-sdks'
 // Repositories for your project
 repositories {
     mavenCentral()
+    gradlePluginPortal()
     // mavenLocal() // for local maven repository if needed
 
     // Repository with JCardSim, Globalplatform, etc, ...
     maven { url "https://javacard.pro/maven" }
     maven { url "https://deadcode.me/mvn" }
+    maven { url 'https://jitpack.io' }
 
     // Local lib repository
     flatDir {
@@ -55,14 +61,14 @@ dependencies {
     testImplementation 'org.json:json:20220924'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.1.1'
 
-    testImplementation(group: 'com.klinec', name: 'javacard-tools', version: '1.0.4') {
+    testImplementation(group: 'com.github.martykan', name: 'remote-card', version: '5d5cc92ee1') {
         exclude group: "com.klinec", module: "jcardsim"
     }
 
     // Include plugin as it has bundled GP & other tools.
     // Alternative: include GP manually, but the included
-    // version has to be compatible with the plugin.
-    runtimeOnly 'com.klinec:gradle-javacard:1.8.0'
+    // version has to be compatible with the plugin
+    runtimeOnly 'com.github.martykan:javacard-gradle-plugin:20c4bbe8a2'
 }
 
 task dumpClassPath(dependsOn: ['idea']) {
@@ -108,13 +114,16 @@ final def JC310b43 = libsSdk + '/jc310b43_kit'
 //
 // JC310b43 supports building also for lower versions (cap.targetsdk).
 // If another SDK is selected, please comment the cap.targetsdk setting.
-final def JC_SELECTED = JC310b43
+final def JC_SELECTED = JC305u3 //JC310b43
 
 javacard {
 
     //noinspection GroovyAssignabilityCheck
     config {
         jckit JC_SELECTED
+        logLevel "VERBOSE"
+
+        gptoolVersion '24.10.15'
 
         // Using custom repo with jcardsim
         debugGpPro true
@@ -128,12 +137,14 @@ javacard {
             aid '6a:63:6d:69:6e:74'
             output 'jcmint.cap'
             ints true
+            verify true
+            debug false
 
             // JC310b43 supports compilation targeting for lower API versions.
             // Here you can specify path to the SDK you want to use.
             // Only JC304 and higher are supported for targeting.
             // If JC310b43 is not used, targetsdk cannot be set.
-            targetsdk JC305u3
+            // targetsdk JC305u3
 
             // Override java bytecode version if needed.
             // javaversion '1.7'
