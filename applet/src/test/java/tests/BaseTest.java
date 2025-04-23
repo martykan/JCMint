@@ -12,7 +12,10 @@ import javax.smartcardio.ResponseAPDU;
 import java.util.ArrayList;
 
 /**
- * Base Test class.
+ * Base Test class providing common functionality for JCMint applet testing.
+ * Handles smart card connection, APDU building, and test configuration.
+ * Supports both physical cards and JavaCard simulators.
+ * 
  * Note: If simulator cannot be started try adding "-noverify" JVM parameter
  *
  * @author Petr Svenda, Dusan Klinec (ph4r05)
@@ -67,7 +70,7 @@ public class BaseTest {
         // System.setProperty("com.licel.jcardsim.randomdata.secure", "1");
 
         runCfg.setTestCardType(cardType);
-        runCfg.setTargetReaderIndex(2);
+        runCfg.setTargetReaderIndex(0);
 
         if (cardType == CardType.REMOTE){
             runCfg.setRemoteAddress("http://127.0.0.1:9901");
