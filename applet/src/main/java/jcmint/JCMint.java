@@ -74,6 +74,9 @@ public class JCMint extends Applet implements ExtendedLength {
                 case Consts.INS_ISSUE:
                     issue(apdu);           // Issue partial signature
                     break;
+                case Consts.INS_ISSUE_SINGLE_DLEQ:
+                    issueSingleDLEQ(apdu);           // Issue signature with DLEQ
+                    break;
                 case Consts.INS_HASH_TO_CURVE:
                     hashToCurve(apdu);     // Hash data to curve point
                     break;
@@ -215,6 +218,60 @@ public class JCMint extends Applet implements ExtendedLength {
 
         // Return the partial signature
         apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
+    }
+
+    /**
+     * Issues a blind signature on a challenge point including NUT-12 DLEQ.
+     * Only available for single-party mode.
+     */
+    private void issueSingleDLEQ(APDU apdu) {
+        byte[] apduBuffer = apdu.getBuffer();
+        byte d = apduBuffer[ISO7816.OFFSET_P2];  // Denomination index
+        BigNat nonce = bn1;                      // Random nonce for proof
+        BigNat tmp = bn2;                        // Temporary computation
+
+        // Ensure single-party mode
+        if (parties != 1)
+            ISOException.throwIt(Consts.E_INVALID_PARTY_COUNT);
+
+        // Generate random nonce for proof
+        randomData.nextBytes(ramArray, (short) 0, (short) 32);
+        nonce.fromByteArray(ramArray, (short) 0, (short) 32);
+
+        // DLEQ proof step 1: Compute R1 = r*G
+        point1.decode(curve.G, (short) 0, (short) curve.G.length);
+        point1.multiplication(nonce);
+        point1.encode(ramArray, (short) 0, false);
+        md.reset();
+        HexUtil.mdHexString(md, ramArray, (short) 0, (short) 65);
+
+        // Decode the challenge point from client
+        point1.decode(apduBuffer, ISO7816.OFFSET_CDATA, (short) 65);
+        point2.decode(apduBuffer, ISO7816.OFFSET_CDATA, (short) 65);
+
+        // DLEQ proof step 2: Compute R2 = r*B'
+        point1.multiplication(nonce);
+        point1.encode(ramArray, (short) 0, false);
+        HexUtil.mdHexString(md, ramArray, (short) 0, (short) 65);
+
+        // DLEQ proof step 3: Add A
+        HexUtil.mdHexString(md, denominations[d].partialKeys, (short) (index * 65), (short) 65);
+
+        // DLEQ proof step 4: Add C'
+        point2.multiplication(denominations[d].secret);
+        point2.encode(apduBuffer, (short) 0, false); // C'
+        // Compute challenge e
+        HexUtil.mdHexString(md, apduBuffer, (short) 0, (short) 65);
+        md.doFinal(apduBuffer, (short) 0, (short) 0, apduBuffer, (short) 65);
+
+        // DLEQ proof step 7: Compute response s = e * secret + nonce
+        tmp.fromByteArray(apduBuffer, (short) 65, (short) 32);  // Load challenge e
+        tmp.modMult(denominations[d].secret, curve.rBN);        // e * secret
+        tmp.modAdd(nonce, curve.rBN);                           // + nonce
+        tmp.copyToByteArray(apduBuffer, (short) (65 + 32));     // Store s
+
+        // Return proof: [C_][e][s] (65 + 32 + 32 bytes)
+        apdu.setOutgoingAndSend((short) 0, (short) (65 + 32 + 32));
     }
 
     /**
@@ -414,6 +471,7 @@ public class JCMint extends Applet implements ExtendedLength {
         byte[] apduBuffer = apdu.getBuffer();
         byte precomputed = apduBuffer[ISO7816.OFFSET_P1];  // Precomputed hash flag
         byte d = apduBuffer[ISO7816.OFFSET_P2];            // Denomination index
+        short messageLength = 64;
 
         // Ensure single-party mode
         if (parties != 1)

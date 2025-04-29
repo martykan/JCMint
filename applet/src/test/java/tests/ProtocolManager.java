@@ -136,6 +136,21 @@ public class ProtocolManager {
         return ecSpec.getCurve().decodePoint(responseAPDU.getData());
     }
 
+    public byte[] issueSingleDLEQ(ECPoint challenge) throws Exception {
+        CommandAPDU cmd = new CommandAPDU(
+                Consts.CLA_JCMINT,
+                Consts.INS_ISSUE_SINGLE_DLEQ,
+                (byte) 0,    // P1: unused
+                (byte) 0,    // P2: denomination (default 0)
+                challenge.getEncoded(false)  // Challenge point to sign
+        );
+        ResponseAPDU responseAPDU = cm.transmit(cmd);
+        Assertions.assertNotNull(responseAPDU);
+        Assertions.assertEquals(ISO7816.SW_NO_ERROR & 0xffff, responseAPDU.getSW());
+
+        return responseAPDU.getData();
+    }
+
     /**
      * Verifies ownership of a token and generates a zero-knowledge proof.
      * This proves knowledge of the secret without revealing it.

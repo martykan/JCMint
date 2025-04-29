@@ -15,6 +15,7 @@ public class Consts {
     public static final byte INS_REDEEM = (byte) 0x06;
     public static final byte INS_REDEEM_SINGLE = (byte) 0x07;
     public static final byte INS_NOP = (byte) 0x08;
+    public static final byte INS_ISSUE_SINGLE_DLEQ = (byte) 0x09;
 
     public final static short E_ALREADY_INITIALIZED = (short) 0xee00;
     public final static short E_INVALID_PARTY_COUNT = (short) 0xee01;

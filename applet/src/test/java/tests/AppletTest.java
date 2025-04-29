@@ -4,12 +4,19 @@ import cz.muni.fi.crocs.rcard.client.Util;
 import javacard.framework.ISO7816;
 import jcmint.Consts;
 import cz.muni.fi.crocs.rcard.client.CardType;
+import jcmint.HexUtil;
+import org.bouncycastle.jce.ECNamedCurveTable;
+import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
 import org.junit.jupiter.api.*;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 
 /**
  * Test suite for the JCMint smart card applet.
@@ -333,5 +340,40 @@ public class AppletTest extends BaseTest {
 
         // Redeem the token (single-party version)
         Assertions.assertTrue(pm.redeemSingle(secret, token, precomputed ? hashedPoint : null));
+    }
+
+    /**
+     * Verifies token issue with DLEQ for single-party (non-federated) scenarios.
+     */
+    @Test
+    public void issueDleqTest() throws Exception {
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        BigInteger[] secrets = new BigInteger[1];
+        ECPoint mintKey = pm.setup(secrets);
+        ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
+
+        // Create a secret and generate the corresponding token
+        byte[] secret = new byte[32];
+        ECPoint challenge = pm.hashToCurve(secret);
+        byte[] proof = pm.issueSingleDLEQ(challenge);
+        ECPoint newToken = ecSpec.getCurve().decodePoint(Arrays.copyOfRange(proof, 0, 65));
+        BigInteger e = new BigInteger(1, Arrays.copyOfRange(proof, 65, 65 + 32));
+        BigInteger s = new BigInteger(1, Arrays.copyOfRange(proof, 65 + 32, 65 + 32 + 32));
+
+        ECPoint verifyToken = challenge.multiply(secrets[0]);
+        Assertions.assertArrayEquals(verifyToken.getEncoded(false), newToken.getEncoded(false));
+
+        // R1 = s*G - e*A
+        ECPoint R1 = ecSpec.getG().multiply(s).subtract(mintKey.multiply(e));
+        // R2 = s*B' - e*C'
+        ECPoint R2 = challenge.multiply(s).subtract(verifyToken.multiply(e));
+        // e == hash(R1,R2,A,C')
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        md.update(Hex.toHexString(R1.getEncoded(false)).getBytes(StandardCharsets.UTF_8));
+        md.update(Hex.toHexString(R2.getEncoded(false)).getBytes(StandardCharsets.UTF_8));
+        md.update(Hex.toHexString(mintKey.getEncoded(false)).getBytes(StandardCharsets.UTF_8));
+        md.update(Hex.toHexString(verifyToken.getEncoded(false)).getBytes(StandardCharsets.UTF_8));
+        byte[] digest = md.digest();
+        Assertions.assertEquals(Hex.toHexString(digest), Hex.toHexString(Arrays.copyOfRange(proof, 65, 65 + 32)));
     }
 }
