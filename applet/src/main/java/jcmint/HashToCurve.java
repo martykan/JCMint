@@ -28,6 +28,23 @@ public class HashToCurve {
             output.negate();
     }
 
+    public void hashLong(byte[] data, short offset, short length, ECPoint output) {
+        Util.arrayFillNonAtomic(prefixBuffer, (short) 32, (short) 4, (byte) 0);
+        md.reset();
+        md.update(Consts.H2C_DOMAIN_SEPARATOR, (short) 0, (short) Consts.H2C_DOMAIN_SEPARATOR.length);
+        md.doFinal(data, offset, (short) length, prefixBuffer, (short) 0);
+
+        for (short counter = 0; counter < (short) 256; ++counter) { // TODO consider increasing max number of iters
+            md.reset();
+            prefixBuffer[32] = (byte) (counter & 0xff);
+            md.doFinal(prefixBuffer, (short) 0, (short) prefixBuffer.length, ramArray, (short) 0);
+            if (output.fromX(ramArray, (short) 0, (short) 32))
+                break;
+        }
+        if (!output.isYEven())
+            output.negate();
+    }
+
     public void hashPrecomputed(byte[] input, short inputOffset, byte[] result, short resultOffset, ECPoint output) {
         Util.arrayFillNonAtomic(prefixBuffer, (short) 32, (short) 4, (byte) 0);
         md.reset();

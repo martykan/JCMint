@@ -482,12 +482,12 @@ public class JCMint extends Applet implements ExtendedLength {
             ISOException.throwIt(Consts.E_ALREADY_SPENT);
 
         // Compute or load H(message)
-        if (precomputed == (byte) 1) {
+        if (precomputed == (byte) 1 && messageLength == 32) {
             // Use precomputed hash provided in command data
             h2c.hashPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 + 65), point1);
         } else {
             // Compute hash on the fly
-            h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
+            h2c.hashLong(apduBuffer, ISO7816.OFFSET_CDATA, messageLength, point1);
         }
         
         // Verify old token: should be H(message) * secret
@@ -495,14 +495,14 @@ public class JCMint extends Applet implements ExtendedLength {
         point1.getW(ramArray, (short) 0);
         
         // Compare computed token with provided token
-        if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32), ramArray, (short) 0, (short) 65) != 0)
+        if (Util.arrayCompare(apduBuffer, (short) (ISO7816.OFFSET_CDATA + messageLength), ramArray, (short) 0, (short) 65) != 0)
             ISOException.throwIt(Consts.E_VERIFICATION_FAILED_TOKEN);
 
         // Mark message as spent
         ledger.append(apduBuffer, ISO7816.OFFSET_CDATA);
         
         // Issue new token: new_challenge * secret
-        point1.decode(apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65), (short) 65);
+        point1.decode(apduBuffer, (short) (ISO7816.OFFSET_CDATA + messageLength + 65), (short) 65);
         point1.multiplication(denominations[d].secret);
         
         // Return new token

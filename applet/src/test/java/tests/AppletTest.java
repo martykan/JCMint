@@ -301,18 +301,30 @@ public class AppletTest extends BaseTest {
      */
     public void swapSingle(boolean precomputed) throws Exception {
         ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
-        ECPoint mintKey = pm.setup(new BigInteger[1]);
+        BigInteger[] secrets = new BigInteger[1];
+        ECPoint mintKey = pm.setup(secrets);
+        ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
 
         // Create a secret and generate the corresponding token
-        byte[] secret = new byte[32];
-        ECPoint hashedPoint = pm.hashToCurve(secret);
-        ECPoint token = pm.issue(hashedPoint);
+        byte[] secret = Hex.decode("407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837");
+        ECPoint Y = pm.hashToCurve(secret);
+        byte[] r = Hex.decode("50b0f34bd8b67952bf14ca1d0b5f855aa08efb88498e87bed7d82081cbd2083c");
+        // B'= Y + r*G
+        ECPoint R = pm.hashToCurve(r);
+        ECPoint B_ = Y.add(R);
+        // C' = a*B'
+        ECPoint C_ = pm.issue(B_);
+        ECPoint verifyC_ = B_.multiply(secrets[0]);
+        Assertions.assertArrayEquals(verifyC_.getEncoded(false), C_.getEncoded(false));
+        ECPoint C = C_.subtract(mintKey.multiply(new BigInteger(r)));
+        Assertions.assertArrayEquals(Y.getEncoded(false), C.getEncoded(false));
 
-        // Swap for a new token with challenge point G
-        ECPoint newToken = pm.swapSingle(secret, token, ProtocolManager.G, precomputed ? hashedPoint : null);
+        byte[] secret2 = new byte[32];
+        ECPoint newChallenge = pm.hashToCurve(secret2);
+        ECPoint newVerifyToken = newChallenge.multiply(secrets[0]);
+        ECPoint newToken = pm.swapSingle(secret, C, newChallenge, precomputed ? B_ : null);
         
-        // New token should equal the mint's public key
-        Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
+        Assertions.assertArrayEquals(newVerifyToken.getEncoded(false), newToken.getEncoded(false));
     }
 
     /**
