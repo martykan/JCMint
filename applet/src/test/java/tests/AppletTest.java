@@ -100,6 +100,10 @@ public class AppletTest extends BaseTest {
         // Test with data ending in 0x02
         data[31] = 0x02;
         Assertions.assertArrayEquals(Util.hexStringToByteArray("046cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f7231a9756caa84811bfe53cb35b626fc0faa43ccd436d07369813b55831584ac"), pm.hashToCurve(data).getEncoded(false));
+
+        // Test longer data
+        byte[] data2 = Hex.decode("33336566646361373839636132363632356535333764336163633132653435303436636162663037626331626433303661363635393033653064663135643034");
+        Assertions.assertArrayEquals(Util.hexStringToByteArray("041629a15fa775f6b92c1b0c8403a205b2a8164d4162e100c96928cebebfea5c734710643a57ae551d765455f2d09811c4a6fd818811e71cf76b70d64297a6d674"), pm.hashToCurve(data2).getEncoded(false));
     }
 
     /**
@@ -301,29 +305,45 @@ public class AppletTest extends BaseTest {
      */
     public void swapSingle(boolean precomputed) throws Exception {
         ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
+        ECPoint mintKey = pm.setup(new BigInteger[1]);
+
+        // Create a secret and generate the corresponding token
+        byte[] secret = new byte[32];
+        ECPoint hashedPoint = pm.hashToCurve(secret);
+        ECPoint token = pm.issue(hashedPoint);
+
+        // Swap for a new token with challenge point G
+        ECPoint newToken = pm.swapSingle(secret, token, ProtocolManager.G, precomputed ? hashedPoint : null);
+
+        // New token should equal the mint's public key
+        Assertions.assertArrayEquals(mintKey.getEncoded(false), newToken.getEncoded(false));
+    }
+
+    @Test
+    public void testSwapSingleAdvanced() throws Exception {
+        ProtocolManager pm = new ProtocolManager(connect(), CARD_IDX);
         BigInteger[] secrets = new BigInteger[1];
         ECPoint mintKey = pm.setup(secrets);
         ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
 
-        // Create a secret and generate the corresponding token
-        byte[] secret = Hex.decode("407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837");
+        // Real world Cashu (nutstash) client example
+        byte[] secret = Hex.decode("2aa4452dff6b13f6eebae4b41b520b2fe5198866600a5093dfff013b86f46625");
         ECPoint Y = pm.hashToCurve(secret);
-        byte[] r = Hex.decode("50b0f34bd8b67952bf14ca1d0b5f855aa08efb88498e87bed7d82081cbd2083c");
+        byte[] r = Hex.decode("99fce58439fc37412ab3468b73db0569322588f62fb3a49182d67e23d877824a");
         // B'= Y + r*G
-        ECPoint R = pm.hashToCurve(r);
-        ECPoint B_ = Y.add(R);
+        ECPoint B_ = ecSpec.getG().multiply(new BigInteger(1, r)).add(Y);
         // C' = a*B'
         ECPoint C_ = pm.issue(B_);
         ECPoint verifyC_ = B_.multiply(secrets[0]);
         Assertions.assertArrayEquals(verifyC_.getEncoded(false), C_.getEncoded(false));
-        ECPoint C = C_.subtract(mintKey.multiply(new BigInteger(r)));
-        Assertions.assertArrayEquals(Y.getEncoded(false), C.getEncoded(false));
+        ECPoint C = C_.subtract(mintKey.multiply(new BigInteger(1, r)));
+        Assertions.assertArrayEquals(Y.multiply(secrets[0]).getEncoded(false), C.getEncoded(false));
 
         byte[] secret2 = new byte[32];
         ECPoint newChallenge = pm.hashToCurve(secret2);
         ECPoint newVerifyToken = newChallenge.multiply(secrets[0]);
-        ECPoint newToken = pm.swapSingle(secret, C, newChallenge, precomputed ? B_ : null);
-        
+        ECPoint newToken = pm.swapSingle(secret, C, newChallenge, null);
+
         Assertions.assertArrayEquals(newVerifyToken.getEncoded(false), newToken.getEncoded(false));
     }
 

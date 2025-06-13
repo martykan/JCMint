@@ -280,9 +280,10 @@ public class JCMint extends Applet implements ExtendedLength {
      */
     private void hashToCurve(APDU apdu) {
         byte[] apduBuffer = apdu.getBuffer();
+        short length = apduBuffer[ISO7816.OFFSET_LC];
 
         // Hash the input data to a curve point
-        h2c.hash(apduBuffer, ISO7816.OFFSET_CDATA, point1);
+        h2c.hashLong(apduBuffer, ISO7816.OFFSET_CDATA, length, point1);
         
         // Return the resulting point
         apdu.setOutgoingAndSend((short) 0, point1.getW(apduBuffer, (short) 0));
@@ -471,7 +472,10 @@ public class JCMint extends Applet implements ExtendedLength {
         byte[] apduBuffer = apdu.getBuffer();
         byte precomputed = apduBuffer[ISO7816.OFFSET_P1];  // Precomputed hash flag
         byte d = apduBuffer[ISO7816.OFFSET_P2];            // Denomination index
-        short messageLength = 64;
+        short messageLength = (short) (apduBuffer[ISO7816.OFFSET_LC] & 0xff - 130);
+        if (precomputed == (byte) 1) {
+            messageLength = (short) (messageLength - 65);
+        }
 
         // Ensure single-party mode
         if (parties != 1)
@@ -482,7 +486,7 @@ public class JCMint extends Applet implements ExtendedLength {
             ISOException.throwIt(Consts.E_ALREADY_SPENT);
 
         // Compute or load H(message)
-        if (precomputed == (byte) 1 && messageLength == 32) {
+        if (precomputed == (byte) 1 && messageLength == (short) 32) {
             // Use precomputed hash provided in command data
             h2c.hashPrecomputed(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (ISO7816.OFFSET_CDATA + 32 + 65 + 65), point1);
         } else {
