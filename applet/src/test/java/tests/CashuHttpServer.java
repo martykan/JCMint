@@ -41,6 +41,7 @@ public class CashuHttpServer extends AbstractHandler {
 
     private ECPoint mintKey;
     private final String KEYSET_ID = "009a1f293253e41e";
+    private final String KEYSET_API_PATH = "/v1/keys/" + KEYSET_ID;
     private final String KEYSET_UNIT = "sat";
 
     public CashuHttpServer(int port, CardManager cardManager, byte cardIndex) {
@@ -93,6 +94,7 @@ public class CashuHttpServer extends AbstractHandler {
                         handleKeysets(result);
                         break;
                     case "/v1/keys":
+                    case KEYSET_API_PATH:
                         handleKeys(result);
                         break;
                     case "/v1/mint/quote/bolt11/fake":
